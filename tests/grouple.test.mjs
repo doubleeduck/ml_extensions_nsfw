@@ -1,0 +1,61 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {parseFilters,searchParameters} from '../src/engines/grouple-filters.mjs';
+import createGrouple,{parseCatalog,parseChapters,parseReader} from '../src/engines/grouple.mjs';
+import {sourceDefinitions} from '../src/definitions.mjs';
+
+test('a valid title served with HTTP 404 is fetched once for details and chapters', async () => {
+  let requests=0;
+  const source=createGrouple({sourceId:'ru.nsfw.allhentai',baseUrl:'https://20.allhen.online',
+    settings:{get:async()=>({})},http:{request:async()=>{requests++;throw Object.assign(Error('404'),{code:'not_found',httpStatus:404,body:'<html>Title</html>'});}},
+    html:{extract:async(_body,projection)=>projection.fields.avatar ? {title:'Title',hero:'Title'} : projection.fields.rows ?
+      {title:'Title',selected:{},rows:[{link:{href:'/title/c1',title:'Chapter 1'},dates:[]}]} :
+      {modernTitle:'Title',creation:[],modernRows:[],people:[],modernAlt:{},modalAlt:[],tags:[]}},
+  });
+  assert.equal((await source.getDetails({mangaId:'/title'})).title,'Title');
+  assert.equal((await source.getChapters({mangaId:'/title'})).length,1);
+  assert.equal(requests,1);
+});
+
+test('AllHentai has its own Qawa SSO login, nested return URI and scoped session origins', () => {
+  const definitions = sourceDefinitions(), allhentai = definitions.find(source => source.id === 'ru.nsfw.allhentai');
+  const login = new URL(allhentai.auth.loginUrl);
+  assert.equal(login.origin,'https://z.qawa.org');
+  assert.equal(login.pathname,'/internal/auth/login');
+  assert.equal(login.searchParams.get('siteId'),'1');
+  assert.equal(login.searchParams.get('targetUri'),'/login/continueSso?siteId=1&targetUri=%2F');
+  const continuation = new URL(login.searchParams.get('targetUri'),login.origin);
+  assert.equal(continuation.pathname,'/login/continueSso');
+  assert.equal(continuation.searchParams.get('siteId'),'1');
+  assert.equal(continuation.searchParams.get('targetUri'),'/');
+  assert.equal(allhentai.auth.profileId,'host.session.v1');
+  assert.equal(allhentai.auth.completionUrl,allhentai.baseUrl);
+  assert.equal(allhentai.auth.successUrl,'https://z.qawa.org/');
+  assert.deepEqual(allhentai.auth.cookieOrigins,['https://20.allhen.online','https://allhen.online','https://z.qawa.org','https://qawa.org']);
+  assert.deepEqual(allhentai.network.authOrigins,allhentai.auth.cookieOrigins);
+  assert.ok(allhentai.network.origins.includes(login.origin));
+  for (const source of definitions.filter(source => source.auth?.rules?.cookieAll?.includes('remember_me') && source.id !== 'ru.nsfw.allhentai')) {
+    assert.equal(source.auth.loginUrl,'https://3.grouple.co/internal/auth/login');
+    assert.equal(source.auth.successUrl,'https://3.grouple.co/');
+    assert.ok(!source.auth.cookieOrigins.some(value => value.includes('qawa.org')));
+    assert.ok(!source.network.origins.includes(login.origin));
+  }
+});
+test('GroupLe API filters, repeated tri-state IDs, special status names and year bounds', () => {
+  const filters = parseFilters({scripts:[`window.__FILTERS.sortType={"RATING":"Popular"};window.__FILTERS.years={min:1900,max:2026};window.__FILTERS.genre={"1":"Action"};`],rows:[]},[['4','Tag']]);
+  assert.deepEqual(filters.map(value => value.key),['sortType','genre','tags','years:min','years:max']);
+  const params = searchParameters({page:3,searchTerm:'name',selectedFilters:{sortType:['RATING'],genre:['include:1','exclude:2'],productionStatus:['include:ongoing'],searchFilters:['exclude:x'],'years:min':['2000'],'years:max':['invalid']}});
+  assert.deepEqual(params,{offset:['100'],q:['name'],sortType:['RATING'],includeElementIds:['1'],excludeElementIds:['2'],includeProductionStatuses:['ongoing'],excludeSearchFilter:['x'],years:['2000,']});
+});
+test('GroupLe IDs remain stable paths, ReadManga selected translator only affects matching rows', () => {
+  const root = {title:'Title',selected:{id:'tr-123',name:'Chosen'},rows:[{link:{href:'/title/v1/c1?d=temporary',title:'Title Глава 1.5 новое',scanlator:'Team (Переводчик)',translations:'[{"personId":123}]'},fallback:'',number:'15',dates:[]}]};
+  const item = parseChapters(root,'https://a.zazaza.me',{readManga:true})[0]; assert.equal(item.id,'/title/v1/c1'); assert.equal(item.number,1.5); assert.equal(item.title,'Глава 1.5 - Chosen');
+  assert.equal(parseChapters(root,'https://a.zazaza.me')[0].title,'Глава 1.5 - Team');
+  assert.throws(() => parseChapters({rows:[]},'https://a.zazaza.me',{requiresAuthorization:true}),error => error.code === 'auth_required');
+  assert.equal(parseCatalog({list:[{elementId:{linkName:'title'},name:'Title',picUrl:'/cover.jpg'}]},'https://a.zazaza.me')[0].id,'title');
+});
+test('GroupLe reader parses both init markers, static hosts, one-way signatures and resh aliases without evaluating JS', () => {
+  assert.deepEqual(parseReader(`rm_h.readerDoInit([['ignored','',"/static/1.jpg"],['path/','https://resh.example/',"2.jpg"],['path/','https://one-way.work/',"3.jpg?sig=x"]]);`,'https://a.zazaza.me'),[
+    {index:0,imageUrl:'https://a.zazaza.me/static/1.jpg'},{index:1,imageUrl:'https://h.example/path/2.jpg'},{index:2,imageUrl:'https://one-way.work/path/3.jpg'}]);
+  assert.deepEqual(parseReader('alert("do not execute")','https://a.zazaza.me'),[]);
+});
