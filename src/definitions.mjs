@@ -100,6 +100,6 @@ export const registrations = [
 ];
 export function sourceDefinitions() { return registrations.map(({_module,...definition}) => definition); }
 export function manifestDefinition({version,publisherKeyId}) {
-  return {schemaVersion:1,extensionId:'official.mangalaunch.nsfw.sources',name:'MangaLaunch Official NSFW Sources',version,publisherKeyId,
+  return {schemaVersion:1,extensionId:'official.mangalaunch.nsfw.sources',name:'MangaLaunch Unofficial NSFW Extensions',version,publisherKeyId,
     icon:'assets/icon.png',sourceApiVersion:1,minAppVersion:'1.0.0',minRuntimeAbi:1,entrypoint:'src/index.mjs',license:'LicenseRef-Proprietary',permissions:['http','html','sourceSettings','sourceSession'],sources:sourceDefinitions(),files:{}};
 }
