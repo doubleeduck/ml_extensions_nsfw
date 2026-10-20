@@ -1,0 +1,33 @@
+[
+  {
+    "sourceId": "ru.nsfw.allhentai",
+    "mangaId": "/fixture",
+    "title": "Fixture",
+    "chapterCount": 1,
+    "recommendationCount": 0,
+    "html": "<div class=\"cr-hero-names__main\">Fixture</div><table><tr class=\"item-row\"><td><a class=\"chapter-link\" href=\"/fixture/c1\">Chapter 1</a></td></tr></table>"
+  },
+  {
+    "sourceId": "ru.nsfw.hchan",
+    "mangaId": "/manga/123-fixture.html",
+    "title": "Fixture",
+    "chapterCount": 1,
+    "html": "<h1 class=\"title_top_a\">Fixture</h1><a href=\"/online/123-fixture.html?key=x\">Read</a>"
+  },
+  {
+    "sourceId": "all.nsfw.pururin",
+    "mangaId": "/gallery/fixture/",
+    "title": "Fixture",
+    "chapterCount": 1,
+    "pageCount": 1,
+    "html": "<div class=\"box-gallery\"><h1 class=\"title\">Fixture</h1><table class=\"table-info\"><tr><td>Pages</td><td>1</td></tr></table></div><div class=\"gallery-preview\"><a><img src=\"https://pururin.me/1t.jpg\"></a></div>"
+  },
+  {
+    "sourceId": "all.nsfw.imhentai",
+    "mangaId": "123",
+    "title": "Fixture",
+    "chapterCount": 1,
+    "recommendationCount": 1,
+    "html": "<div class=\"gallery_first\"><h1>Fixture</h1><ul class=\"galleries_info\"></ul></div><input id=\"load_pages\" value=\"2\"><div class=\"row related\"><div class=\"thumb\"><div class=\"gallery_title\"><a href=\"/gallery/456/\">Other</a></div><div class=\"inner_thumb\"><img src=\"/cover.jpg\"></div></div></div>"
+  }
+]

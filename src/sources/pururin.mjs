@@ -1,4 +1,4 @@
-import {recentRequest} from '../core/recent.mjs';
+import {recent} from '../core/recent.mjs';
 import {chapter,filter,manga,normalizeText,parseError,record,string} from '../core/data.mjs';
 import {requireArray,requireRecord,urlWithQuery} from '../core/http.mjs';
 
@@ -59,23 +59,25 @@ export function parseDetails(input,id) {
     description:description.join('\n') || null,status:'completed',ageRating:'18+',tags:texts(root.tags)});
 }
 export default function createPururin(ctx) {
-  const titleRequest = recentRequest(input => ctx.http.request(input));
-  async function request(url,{method = 'GET',body,referer = url,json = false,reuse = false} = {}) {
-    const response = await (reuse ? titleRequest : input => ctx.http.request(input))({method,url,responseType:'text',body,userAgentProfile:'browser',headers:{
+  async function request(url,{method = 'GET',body,referer = url,json = false} = {}) {
+    const response = await ctx.http.request({method,url,responseType:'text',body,userAgentProfile:'browser',headers:{
       Accept:'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',Origin:base,Referer:referer,
       ...(body != null ? {'Content-Type':'application/x-www-form-urlencoded'} : {})}});
     if (typeof response.body !== 'string' || !response.body.trim()) {
-      if (json) return null;
       throw Object.assign(Error('Empty Pururin response.'),{code:'invalid_response',phase:'http'});
     }
     if (!json) return response;
     try { return JSON.parse(response.body); } catch { throw parseError('Pururin tag payload is invalid.'); }
   }
-  async function html(url,projection,reuse = false) { const response = await request(url,{reuse}); return ctx.html.extract(response.body,{...projection,baseUrl:response.url ?? url}); }
+  async function html(url,projection) { const response = await request(url); return ctx.html.extract(response.body,{...projection,baseUrl:response.url ?? url}); }
+  const chaptersProjection = {selector:'.table-collection tbody tr a',all:true,fields:{href:{attr:'href'},title:{text:true}}};
+  const pagesProjection = {selector:'.gallery-preview a img',all:true,fields:{lazy:{attr:'data-src'},src:{attr:'src'}}};
+  const titlePage = recent(url => html(url,{fields:{details:detailsProjection,chapters:chaptersProjection,pages:pagesProjection}}));
+  const tagLookup = recent(key => { const [query,taxonomy]=JSON.parse(key); return searchTag(query,taxonomy); },{limit:128,ttlMs:300000});
   const listing = async url => parseListing(await html(url,listingProjection));
   async function searchTag(query,taxonomy) {
     const payload = await request(`${base}/api/get/tags/search`,{method:'POST',body:new URLSearchParams({text:query}).toString(),referer:`${base}/tags/${taxonomy}/`,json:true});
-    if (!Array.isArray(payload)) return null;
+    if (!Array.isArray(payload)) throw parseError('Pururin taxonomy payload is not a list.');
     const item = payload.find(value => normalizeText(record(value).name).toLowerCase().includes(query.toLowerCase()));
     return item ? {id:Number.parseInt(String(item.id),10) || 0,name:String(item.name ?? '').trim(),taxonomy} : null;
   }
@@ -87,11 +89,21 @@ export default function createPururin(ctx) {
       const included = [], excluded = [], sort = string(selectedFilters.sort?.[0]) ?? 'newest', range = pageRange(selectedFilters.pages?.[0] ?? '');
       const selectedTypes = new Set(selectedFilters.types ?? []);
       if (selectedTypes.size) for (const [id,name] of legacyTypes) if (!selectedTypes.has(id)) excluded.push({id:Number(id),name,taxonomy:'category'});
+      const lookups=[];
       for (const [key,taxonomy] of fields) for (const raw of (selectedFilters[key]?.[0] ?? '').split(',').map(value => value.trim()).filter(Boolean)) {
         const exclude = raw.startsWith('-'), query = exclude ? raw.slice(1).trim() : raw;
         if (!query) continue;
-        const tag = await searchTag(query,taxonomy); if (tag) (exclude ? excluded : included).push(tag);
+        lookups.push({query,taxonomy,exclude});
       }
+      const resolved = new Array(lookups.length); let next=0, lookupError;
+      await Promise.all(Array.from({length:Math.min(3,lookups.length)},async()=>{
+        while(next<lookups.length && !lookupError) {
+          const index=next++;
+          try { const {query,taxonomy}=lookups[index]; resolved[index]=await tagLookup(JSON.stringify([query,taxonomy])); }
+          catch(error) {lookupError=error;throw error;}
+        }
+      }));
+      for(let index=0;index<resolved.length;index++) if(resolved[index]) (lookups[index].exclude ? excluded : included).push(resolved[index]);
       const params = {sort,start_page:range[0],last_page:range[1],...(page > 1 ? {page} : {})};
       if (!searchTerm.trim() && included.length === 1 && !excluded.length && sort) {
         const tag = included[0]; return listing(urlWithQuery(`/browse/tags/${tag.taxonomy}/${tag.id}/${encodeURIComponent(tag.name)}`,base,params));
@@ -100,14 +112,14 @@ export default function createPururin(ctx) {
         ...(included.length ? {included_tags:JSON.stringify(included.map(({id,name}) => ({id,name})))} : {}),
         ...(excluded.length ? {excluded_tags:JSON.stringify(excluded.map(({id,name}) => ({id,name})))} : {})}));
     },
-    async getDetails({mangaId:id}) { return parseDetails(await html(new URL(normalizePath(id),base).href,detailsProjection,true),id); },
+    async getDetails({mangaId:id}) { return parseDetails((await titlePage(new URL(normalizePath(id),base).href)).details,id); },
     async getChapters({mangaId:id}) {
-      const data = requireArray(await html(new URL(normalizePath(id),base).href,{selector:'.table-collection tbody tr a',all:true,fields:{href:{attr:'href'},title:{text:true}}},true),'Pururin chapters');
+      const data = requireArray((await titlePage(new URL(normalizePath(id),base).href)).chapters,'Pururin chapters');
       const chapters = data.map(value => { const row = requireRecord(value,'Pururin chapter'); return chapter({id:normalizePath(row.href ?? id),title:string(normalizeText(row.title)) ?? 'Chapter',number:1}); }).reverse();
       return chapters.length ? chapters : [chapter({id:normalizePath(id),title:'Chapter',number:1})];
     },
     async getPages({chapterId:id}) {
-      const data = requireArray(await html(new URL(normalizePath(id),base).href,{selector:'.gallery-preview a img',all:true,fields:{lazy:{attr:'data-src'},src:{attr:'src'}}}),'Pururin pages');
+      const data = requireArray((await titlePage(new URL(normalizePath(id),base).href)).pages,'Pururin pages');
       const pages = data.map(imageUrl).filter(Boolean).map((url,index) => ({index,imageUrl:url.replace('t.','.')}));
       if (!pages.length) throw parseError('Pururin pages were not found.');
       return pages;

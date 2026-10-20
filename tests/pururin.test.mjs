@@ -20,3 +20,44 @@ test('Pururin tag resolution uses own form POST and retains included/excluded JS
   assert.deepEqual(JSON.parse(query.get('included_tags')),[{id:10,name:'sample'}]);
   assert.ok(JSON.parse(query.get('excluded_tags')).some(value => value.id === 10));
 });
+
+test('Pururin coalesces repeated lookups, resolves at most three at once and reuses IDs on page two', async () => {
+  const gates=new Map(), posts=[], listings=[];
+  const source=createPururin({http:{request:async input=>{
+    if(input.method!=='POST'){listings.push(new URL(input.url));return {body:'html'};}
+    const text=new URLSearchParams(input.body).get('text');posts.push(text);
+    await new Promise(resolve=>gates.set(text,resolve));
+    return {body:JSON.stringify([{id:text.charCodeAt(0),name:text}])};
+  }},html:{extract:async()=>[]}});
+  const query={searchTerm:'title',selectedFilters:{tags:['a,b,c,d,-a']}};
+  const pending=source.search(query);
+  await new Promise(setImmediate);assert.deepEqual(posts,['a','b','c']);
+  gates.get('c')();await new Promise(setImmediate);assert.deepEqual(posts,['a','b','c','d']);
+  gates.get('d')();gates.get('b')();gates.get('a')();await pending;
+  await source.search({...query,page:2});assert.equal(posts.length,4);assert.equal(listings.length,2);
+  assert.deepEqual(JSON.parse(listings[0].searchParams.get('included_tags')).map(x=>x.name),['a','b','c','d']);
+  assert.deepEqual(JSON.parse(listings[0].searchParams.get('excluded_tags')).map(x=>x.name),['a']);
+  assert.equal(listings[1].searchParams.get('page'),'2');
+});
+
+test('Pururin does not cache failed taxonomy reads and separates taxonomies', async () => {
+  let calls=0;
+  const source=createPururin({http:{request:async input=>{
+    if(input.method!=='POST')return {body:'html'};
+    calls++;if(calls===1)throw Object.assign(Error('offline'),{code:'network'});
+    return {body:'[{"id":1,"name":"a"}]'};
+  }},html:{extract:async()=>[]}});
+  const query={searchTerm:'title',selectedFilters:{tags:['a']}};
+  await assert.rejects(source.search(query),{code:'network'});
+  await source.search(query);await source.search({...query,selectedFilters:{tags:['a'],artists:['a']}});
+  assert.equal(calls,3);
+});
+
+test('empty or malformed taxonomy replies are retried rather than negative-cached', async () => {
+  for(const invalid of ['', '{}']) {
+    let calls=0;
+    const source=createPururin({http:{request:async input=>({body:input.method==='POST' ? (++calls===1 ? invalid : '[]') : 'html'})},html:{extract:async()=>[]}});
+    const query={searchTerm:'title',selectedFilters:{tags:['a']}};
+    await assert.rejects(source.search(query));await source.search(query);assert.equal(calls,2);
+  }
+});

@@ -5,16 +5,18 @@ import createGrouple,{parseCatalog,parseChapters,parseReader} from '../src/engin
 import {sourceDefinitions} from '../src/definitions.mjs';
 
 test('a valid title served with HTTP 404 is fetched once for details and chapters', async () => {
-  let requests=0;
+  let requests=0, titleExtracts=0;
   const source=createGrouple({sourceId:'ru.nsfw.allhentai',baseUrl:'https://20.allhen.online',
     settings:{get:async()=>({})},http:{request:async()=>{requests++;throw Object.assign(Error('404'),{code:'not_found',httpStatus:404,body:'<html>Title</html>'});}},
-    html:{extract:async(_body,projection)=>projection.fields.avatar ? {title:'Title',hero:'Title'} : projection.fields.rows ?
+    html:{extract:async(_body,projection)=>projection.fields.details ? (titleExtracts++, {details:{modernTitle:'Title',creation:[],modernRows:[],people:[],modernAlt:{},modalAlt:[],tags:[]}, chapters:{title:'Title',selected:{},rows:[{link:{href:'/title/c1',title:'Chapter 1'},dates:[]}]}, recommendations:[]}) : projection.fields.avatar ? {title:'Title',hero:'Title'} : projection.fields.rows ?
       {title:'Title',selected:{},rows:[{link:{href:'/title/c1',title:'Chapter 1'},dates:[]}]} :
       {modernTitle:'Title',creation:[],modernRows:[],people:[],modernAlt:{},modalAlt:[],tags:[]}},
   });
   assert.equal((await source.getDetails({mangaId:'/title'})).title,'Title');
   assert.equal((await source.getChapters({mangaId:'/title'})).length,1);
-  assert.equal(requests,1);
+  assert.equal(requests,1); assert.equal(titleExtracts,1);
+  assert.deepEqual((await source.getRecommendations({mangaId:'/title'})).items,[]);
+  assert.equal(requests,1); assert.equal(titleExtracts,1);
 });
 
 test('AllHentai has its own Qawa SSO login, nested return URI and scoped session origins', () => {

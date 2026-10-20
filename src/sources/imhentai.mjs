@@ -140,7 +140,8 @@ export default function createIMHentai(ctx) {
     if (response.body.includes('Overload... Please use the advanced search')) throw Object.assign(Error('IMHentai is overloaded.'),{code:'rate_limited',phase:'http'});
     return ctx.html.extract(response.body,{...projection,baseUrl:response.url ?? url});
   }
-  const titlePage = recent(url => html(url,detailsProjection));
+  const relatedProjection = {selector:'.row.related .thumb',all:true,fields:tileFields};
+  const titlePage = recent(url => html(url,{fields:{details:detailsProjection,related:relatedProjection}}));
   return {
     async getFilters() { return buildFilters(edition); },
     async getPopular({page = 1} = {}) { const url = await base(); return parseListing(await html(listingUrl(url,edition,{page,popular:true}),listingProjection),url); },
@@ -151,12 +152,12 @@ export default function createIMHentai(ctx) {
       if (query.selectedFilters?.random?.includes('true')) return [parseDetails(await html(target,detailsProjection),'',url,{random:true})];
       return parseListing(await html(target,listingProjection),url);
     },
-    async getDetails({mangaId:id}) { const url = await base(); return parseDetails(await titlePage(makeUrl(url,`/gallery/${id}/`)),id,url); },
+    async getDetails({mangaId:id}) { const url = await base(); return parseDetails((await titlePage(makeUrl(url,`/gallery/${id}/`))).details,id,url); },
     async getChapters({mangaId:id}) { const details = await this.getDetails({mangaId:id}); return [chapter({id:`gallery:${id}`,title:string(details.type) ?? 'Gallery',number:1})]; },
     async getPages({mangaId:id}) { const url = await base(); return parsePages(await html(makeUrl(url,`/view/${id}/1/`),pagesProjection),url); },
     async getRecommendations({mangaId:id,page = 1}) {
       const url = await base(), normalized = Math.max(1,page);
-      return {items:normalized > 1 ? [] : parseListing(await html(makeUrl(url,`/gallery/${id}/`),{selector:'.row.related .thumb',all:true,fields:tileFields}),url).filter(item => item.id !== id),
+      return {items:normalized > 1 ? [] : parseListing((await titlePage(makeUrl(url,`/gallery/${id}/`))).related,url).filter(item => item.id !== id),
         page:normalized,hasNextPage:false};
     },
   };
