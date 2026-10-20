@@ -1,4 +1,4 @@
-> Текущий состав: 11 NSFW источников, пакет `official.mangalaunch.nsfw.sources`.
+> Текущий состав: 10 NSFW источников, пакет `official.mangalaunch.nsfw.sources`.
 > Разделение, новые NSFW ID и переход: [SOURCE_BUNDLE_SPLIT_RU.md](SOURCE_BUNDLE_SPLIT_RU.md).
 
 # Создание JS-источника: SDK v1
@@ -36,7 +36,7 @@ tests/…                # developer-only, в пакет не включаютс
 ```
 
 Официальный пул собирается отдельно: `src/definitions.mjs` → один manifest с
-11 sourceId; `src/index.mjs` → dispatcher фабрик. Новый официальный source требует
+10 sourceId; `src/index.mjs` → dispatcher фабрик. Новый официальный source требует
 обновить обе регистрации и tests. NSFW и обычные источники выпускаются раздельными пакетами; см. SOURCE_BUNDLE_SPLIT_RU.md.
 
 Общие engines должны быть фабриками. Изменяемое состояние, cursors и кэши

@@ -1,6 +1,6 @@
 # MangaLaunch Official NSFW Sources
 
-Отдельный подписанный пакет **11 NSFW источников** для MangaLaunch.
+Отдельный подписанный пакет **10 NSFW источников** для MangaLaunch.
 Идентификатор расширения: `official.mangalaunch.nsfw.sources`.
 Обычные источники выпускаются отдельно в `ml_extensions`. Все источники этого пакета имеют `isNsfw: true` и новые ID с сегментом `.nsfw.`.
 
@@ -8,7 +8,6 @@
 
 - **HentaiLib** — `ru.nsfw.hentailib`
 - **YaoiLib** — `ru.nsfw.yaoilib`
-- **MintManga** — `ru.nsfw.mintmanga`
 - **AllHentai** — `ru.nsfw.allhentai`
 - **Senkognito** — `ru.nsfw.senkognito`
 - **IMHentai** — `all.nsfw.imhentai`

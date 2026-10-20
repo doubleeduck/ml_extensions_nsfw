@@ -1,4 +1,4 @@
-> Текущий состав: 11 NSFW источников, пакет `official.mangalaunch.nsfw.sources`.
+> Текущий состав: 10 NSFW источников, пакет `official.mangalaunch.nsfw.sources`.
 > Разделение, новые NSFW ID и переход: [SOURCE_BUNDLE_SPLIT_RU.md](SOURCE_BUNDLE_SPLIT_RU.md).
 
 # Автоматическая сборка и публикация расширений в GitHub

@@ -1,4 +1,4 @@
-> Текущий состав: 11 NSFW источников, пакет `official.mangalaunch.nsfw.sources`.
+> Текущий состав: 10 NSFW источников, пакет `official.mangalaunch.nsfw.sources`.
 > Разделение, новые NSFW ID и переход: [SOURCE_BUNDLE_SPLIT_RU.md](SOURCE_BUNDLE_SPLIT_RU.md).
 
 # Build, verification and release
@@ -33,7 +33,7 @@ The source package contains no Dart/native implementation or runtime Node import
 The Node fixtures and offline factory probe do not prove live source parity.
 In the app repository, run all source fixture/native differential tests, the
 full app test/analyzer suite and Android/Windows release builds. Confirm all
-11 source IDs declared by this repository, existing library/history/download IDs, private sessions, login/
+10 source IDs declared by this repository, existing library/history/download IDs, private sessions, login/
 logout, filters, recommendations, pages, pinned media/downloads/OCR, background
 updates, installation/update/rollback/disable/remove and simultaneous search.
 Check physical arm64/release and Windows release behavior without clearing or

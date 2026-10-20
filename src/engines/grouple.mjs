@@ -74,7 +74,7 @@ const readerInfoProjection = {fields:{avatar:{selector:'.user-avatar',text:true}
   hero:{selector:'.cr-hero-names__main',text:true}}};
 export default function createGrouple(ctx) {
   const titleResponse = recent(url => response(url));
-  const requiresAuthorization = ['ru.nsfw.allhentai','ru.rumix','ru.nsfw.mintmanga'].includes(ctx.sourceId), accepts404 = ctx.sourceId === 'ru.nsfw.allhentai';
+  const requiresAuthorization = ['ru.nsfw.allhentai','ru.rumix'].includes(ctx.sourceId), accepts404 = ctx.sourceId === 'ru.nsfw.allhentai';
   const base = async () => string(record(await ctx.settings.get('network')).customBaseUrl) ?? ctx.baseUrl;
   async function response(url,{json = false,tags = false,reuse = false} = {}) {
     if (reuse && !json && !tags) return titleResponse(url);

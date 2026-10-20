@@ -1,10 +1,11 @@
 # Разделение пакетов источников
 
-С 20.10.2026 источники разделены по уже существовавшему признаку `isNsfw`.
-Обычный каталог: 19 источников, `official.mangalaunch.sources`, репозиторий `ml_extensions`.
-NSFW-каталог: 11 источников, `official.mangalaunch.nsfw.sources`, репозиторий `nsfw_ml_extensions`.
-Классификация сайтов не изменялась: например, MintManga находится в NSFW,
-а MangaChan и MangaShi — в основном пакете согласно их прежним декларациям.
+С 20.10.2026 источники разделены по признаку `isNsfw`.
+Классификация MintManga исправлена по указанию владельца: это обычный источник.
+Обычный каталог: 20 источников, `official.mangalaunch.sources`, репозиторий `ml_extensions`.
+NSFW-каталог: 10 источников, `official.mangalaunch.nsfw.sources`, репозиторий `nsfw_ml_extensions`.
+MintManga, MangaChan и MangaShi находятся в основном пакете. MintManga сохраняет
+прежний ID `ru.mintmanga`; NSFW ID для него не используется.
 
 ## ID и совместимость
 
@@ -15,7 +16,6 @@ sourceId и extensionId сохранены. Всем NSFW-источникам �
 | --- | --- |
 | ru.hentailib | ru.nsfw.hentailib |
 | ru.yaoilib | ru.nsfw.yaoilib |
-| ru.mintmanga | ru.nsfw.mintmanga |
 | ru.allhentai | ru.nsfw.allhentai |
 | ru.senkognito | ru.nsfw.senkognito |
 | all.imhentai | all.nsfw.imhentai |
@@ -86,10 +86,10 @@ MLSOURCE_LIVE_IDS=ru.nsfw.nudemoon и путь test/features/extensions/official
 
 - Основной пакет: 98 Node-тестов; NSFW: 65 Node-тестов, без пропусков.
 - Оба SDK bootstrap собраны независимо и совпадают по SHA-256.
-- Подпись, manifest и все 19/11 фабрик проверены приложением в Windows LPAC.
+- Подпись, manifest и все 20/10 фабрик проверены приложением в Windows LPAC.
 - Живой ru.nsfw.nudemoon: каталог, 90 тегов, множественный выбор, сведения,
   глава, 25 reader-страниц и загрузка обложки/первой страницы через media broker.
 - flutter analyze: замечаний нет. Production-код приложения не изменялся.
-- Локальные QA-архивы версии 1.0.0-dev.split.1: основной 44 payload-файла,
-  NSFW 26. Они подписаны временным development-ключом для проверки,
+- Локальные QA-архивы версии 1.0.0-dev.split.2: основной 45 payload-файлов,
+  NSFW 25. Они подписаны временным development-ключом для проверки,
   не являются production-релизами и не опубликованы.

@@ -9,7 +9,6 @@ import createNudeMoon from './sources/nudemoon.mjs';
 const factories = new Map([
   ['ru.nsfw.hentailib',createLibGroup],
   ['ru.nsfw.yaoilib',createLibGroup],
-  ['ru.nsfw.mintmanga',createGrouple],
   ['ru.nsfw.allhentai',createGrouple],
   ['ru.nsfw.senkognito',createSenkuro],
   ['all.nsfw.imhentai',createIMHentai],

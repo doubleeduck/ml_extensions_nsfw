@@ -10,10 +10,6 @@ const sourceBranding = {
     "icon": "assets/source_logos/yaoilib.png",
     "accentColor": "#CF6AA8"
   },
-  "mintmanga": {
-    "icon": "assets/source_logos/mintmanga.png",
-    "accentColor": "#7CC173"
-  },
   "allhentai": {
     "icon": "assets/source_logos/allhentai.png",
     "accentColor": "#E45A6B"
@@ -72,7 +68,7 @@ const libgroup = (id,name,host,siteId,nsfw = false) => source(id,name,host,'engi
   parameters:{siteId:String(siteId)},settings:libSettings,origins:libApis,images:libImages,
   auth:{...cookieAuth(host,'/ru'),profileId:'host.session.v1',rules:{bearer:true,cookieAll:['XSRF-TOKEN','mangalib_session','remember_web_*'],tokenStorageKeys:['auth'],tokenPath:['token','access_token'],tokenTypePath:['token','token_type'],tokenType:'bearer'},cookieOrigins:[...new Set([origin(host),...libApis,...libCookieRoots])],sessionExport:{headers:['Cookie','Authorization','X-XSRF-TOKEN'],values:['accessToken','csrfToken']}},
   template:'/ru/manga/{id}',bindings:{author:'authors',artist:'artists',tags:'tags'},media:{sendOrigin:true}});
-const groupleCookieRoots = {'a.zazaza.me':'zazaza.me','2.mintmanga.one':'mintmanga.one','1.seimanga.me':'seimanga.me','1.selfmanga.live':'selfmanga.live','20.allhen.online':'allhen.online'};
+const groupleCookieRoots = {'a.zazaza.me':'zazaza.me','1.seimanga.me':'seimanga.me','1.selfmanga.live':'selfmanga.live','20.allhen.online':'allhen.online'};
 const grouple = (id,name,host,nsfw = false) => {
   const authOrigin = id === 'ru.nsfw.allhentai' ? 'https://z.qawa.org' : 'https://3.grouple.co';
   const login = new URL('/internal/auth/login',authOrigin);
@@ -96,7 +92,7 @@ const senkuro = () => {
 };
 export const registrations = [
   libgroup('ru.nsfw.hentailib','HentaiLib','hentailib.me',4,true),libgroup('ru.nsfw.yaoilib','YaoiLib','v2.shlib.life',2,true),
-  grouple('ru.nsfw.mintmanga','MintManga','2.mintmanga.one',true),grouple('ru.nsfw.allhentai','AllHentai','20.allhen.online',true),
+  grouple('ru.nsfw.allhentai','AllHentai','20.allhen.online',true),
   senkuro(),...['all','en','ru'].map(imhentai),
   source('all.nsfw.pururin','Pururin','pururin.me','sources/pururin.mjs',{nsfw:true,template:'/{id}',encoding:'path',images:['https://pururin.me'],bindings:{author:'circles',artist:'artists',tags:'tags'}}),
   source('ru.nsfw.hchan','H-chan','x2.h-chan.me','engines/chan.mjs',{nsfw:true,custom:true,recommendations:true,capabilities:['latest','search','filters'],template:'/{id}',encoding:'path',images:['https://h-chan.me'],bindings:{tags:'tags'},presentation:{coverFit:'contain'}}),
