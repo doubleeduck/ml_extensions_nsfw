@@ -86,7 +86,7 @@ const imhentai = language => source(`${language}.nsfw.imhentai`,'IMHentai','imhe
 const senkuro = () => {
   const host = 'senkognito.com', api = 'api.senkognito.com';
   return source('ru.nsfw.senkognito','Senkognito',host,'engines/senkuro.mjs',{engine:'Senkuro GraphQL JS',nsfw:true,refresh:true,recommendations:true,
-    capabilities:['browse','search','filters'],origins:[origin(api)],images:['https://senkuro.me','https://senkuro.com','https://senkognito.com','https://senkuro.net'],
+    capabilities:['browse','latest','search','filters'],origins:[origin(api)],images:['https://senkuro.me','https://senkuro.com','https://senkognito.com','https://senkuro.net'],
     auth:{...cookieAuth(host,'/'),profileId:'host.session.v1',rules:{bearer:true,tokenStorageKeys:['auth','token','accessToken','access_token'],tokenFields:['access_token','accessToken','token','jwt']},cookieOrigins:[origin(host),origin(api)],sessionExport:{headers:['Cookie','Authorization'],values:['accessToken']}},
     template:'/manga/{id}',idPart:{separator:',,',index:1}});
 };

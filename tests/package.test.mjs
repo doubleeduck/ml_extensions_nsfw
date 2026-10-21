@@ -5,6 +5,10 @@ import {readFile,readdir} from 'node:fs/promises';
 import {registrations,sourceDefinitions,manifestDefinition} from '../src/definitions.mjs';
 import createSource from '../src/index.mjs';
 import {canonicalJson,packageZip,signedManifest,verifyPackage} from '../tools/package_format.mjs';
+
+test('Senkognito advertises the implemented latest capability', () => {
+  assert.ok(registrations.find(s=>s.id==='ru.nsfw.senkognito').capabilities.includes('latest'));
+});
 test('unofficial package registers 10 NSFW IDs and its offline factories never perform IO', () => {
   assert.equal(registrations.length,10); assert.equal(new Set(registrations.map(source => source.id)).size,10);
   assert.deepEqual(registrations.map(source => source.id),["ru.nsfw.hentailib","ru.nsfw.yaoilib","ru.nsfw.allhentai","ru.nsfw.senkognito","all.nsfw.imhentai","en.nsfw.imhentai","ru.nsfw.imhentai","all.nsfw.pururin","ru.nsfw.hchan","ru.nsfw.nudemoon"]);
