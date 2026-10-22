@@ -33,6 +33,8 @@ test('AllHentai opens its base URL for manual login and retains scoped Qawa sess
   assert.deepEqual(allhentai.auth.cookieOrigins,['https://20.allhen.online','https://allhen.online','https://z.qawa.org','https://qawa.org']);
   assert.deepEqual(allhentai.network.authOrigins,allhentai.auth.cookieOrigins);
   assert.ok(allhentai.network.origins.includes('https://z.qawa.org'));
+  assert.ok(allhentai.network.imageOrigins.includes('https://aaa200.rocks'));
+  assert.ok(!allhentai.network.authOrigins.includes('https://aaa200.rocks'));
   for (const source of definitions.filter(source => source.auth?.rules?.cookieAll?.includes('remember_me') && source.id !== 'ru.nsfw.allhentai')) {
     assert.equal(source.auth.loginUrl,'https://3.grouple.co/internal/auth/login');
     assert.equal(source.auth.successUrl,'https://3.grouple.co/');

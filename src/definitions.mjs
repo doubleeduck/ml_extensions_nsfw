@@ -76,7 +76,7 @@ const grouple = (id,name,host,nsfw = false) => {
   return source(id,name,host,'engines/grouple.mjs',{engine:'GroupLe JS',nsfw,custom:true,refresh:true,recommendations:true,
   template:'/{id}',encoding:'path',settings:{version:1,legacyNamespace:'libgroup',roles:{titleLanguage:'titleLanguage'},fields:[titleLanguage]},
   auth:{...cookieAuth(host),profileId:'host.session.v1',rules:{cookieAll:['remember_me'],tokenStorageKeys:['gwt']},loginUrl,cookieOrigins:[origin(host),...(groupleCookieRoots[host] ? [origin(groupleCookieRoots[host])] : []),authOrigin,allhentai ? 'https://qawa.org' : 'https://grouple.co'],completionUrl:origin(host),successUrl:`${authOrigin}/`,sessionExport:{headers:['Cookie'],values:[]}},
-  origins:[authOrigin],images:['https://one-way.work','https://manga1.ru','https://manga2.ru','https://manga3.ru','https://mangap.ru','https://mangapoisk.org','https://readmanga.io',...(allhentai ? ['https://aaa200.one'] : [])],media:{sendOrigin:true}});
+  origins:[authOrigin],images:['https://one-way.work','https://manga1.ru','https://manga2.ru','https://manga3.ru','https://mangap.ru','https://mangapoisk.org','https://readmanga.io',...(allhentai ? ['https://aaa200.one','https://aaa200.rocks'] : [])],media:{sendOrigin:true}});
 };
 const imhentai = language => source(`${language}.nsfw.imhentai`,'IMHentai','imhentai.xxx','sources/imhentai.mjs',{nsfw:true,custom:true,recommendations:true,auth:cookieAuth('imhentai.xxx'),
   template:'/gallery/{id}/',images:['https://imhentai.xxx','https://imhentai.me','https://imhentai.com'],bindings:{author:'groups',artist:'artists',tags:'tags'}});
