@@ -70,7 +70,7 @@ export function parseReader(body,base) {
 const recommendationsProjection = {selector:'.ui-section',all:true,fields:{like:{selector:'a[href*="/list/like/"]',attr:'href'},
   cards:{selector:'.similar-item-card a.entity-card-tile, a.entity-card-tile',all:true,fields:{href:{attr:'href'},title:{selector:'.entity-card-tile__title',text:true},
     image:{selector:'img',fields:{alt:{attr:'alt'},lazy:{attr:'data-src'},src:{attr:'src'}}},type:{selector:'.entity-card-tile__subtitle span',text:true},rating:{selector:'app-user-rating-value span',text:true}}}}};
-const readerInfoProjection = {fields:{avatar:{selector:'.user-avatar',text:true},title:{selector:'title',text:true},content:{selector:'body',text:true},
+const readerInfoProjection = {fields:{title:{selector:'title',text:true},content:{selector:'body',text:true},
   hero:{selector:'.cr-hero-names__main',text:true}}};
 export default function createGrouple(ctx) {
   const titleResponse = recent(url => response(url));
@@ -133,9 +133,10 @@ export default function createGrouple(ctx) {
         if (!['network','offline','timeout','not_found','invalid_response'].includes(error.code)) throw error;
         url.search = ''; body = await response(url.href);
       }
-      const info = requireRecord(await ctx.html.extract(body,{...readerInfoProjection,baseUrl:url.href}),'GroupLe reader metadata');
-      if (requiresAuthorization && info.avatar == null) throw Object.assign(Error('GroupLe login is required.'),{code:'auth_required',phase:'parse'});
+      // The reader payload is authoritative. Modern AllHentai pages no longer
+      // contain the legacy avatar selector, even for an authenticated user.
       const pages = parseReader(body,origin); if (pages.length) return pages;
+      const info = requireRecord(await ctx.html.extract(body,{...readerInfoProjection,baseUrl:url.href}),'GroupLe reader metadata');
       const title = normalizeText(info.title).toLowerCase(), content = normalizeText(info.content).toLowerCase();
       if (title.includes('платный доступ') || content.includes('платный доступ') && content.includes('купить подписку')) {
         throw Object.assign(Error('Premium access is required.'),{code:'chapter_unavailable',phase:'parse',access:{type:'paid',availableAt:null,priceLabel:null,message:'This chapter requires an active premium subscription on the source.'}});

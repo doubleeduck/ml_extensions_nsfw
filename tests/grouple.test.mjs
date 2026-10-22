@@ -8,7 +8,7 @@ test('a valid title served with HTTP 404 is fetched once for details and chapter
   let requests=0, titleExtracts=0;
   const source=createGrouple({sourceId:'ru.nsfw.allhentai',baseUrl:'https://20.allhen.online',
     settings:{get:async()=>({})},http:{request:async()=>{requests++;throw Object.assign(Error('404'),{code:'not_found',httpStatus:404,body:'<html>Title</html>'});}},
-    html:{extract:async(_body,projection)=>projection.fields.details ? (titleExtracts++, {details:{modernTitle:'Title',creation:[],modernRows:[],people:[],modernAlt:{},modalAlt:[],tags:[]}, chapters:{title:'Title',selected:{},rows:[{link:{href:'/title/c1',title:'Chapter 1'},dates:[]}]}, recommendations:[]}) : projection.fields.avatar ? {title:'Title',hero:'Title'} : projection.fields.rows ?
+    html:{extract:async(_body,projection)=>projection.fields.details ? (titleExtracts++, {details:{modernTitle:'Title',creation:[],modernRows:[],people:[],modernAlt:{},modalAlt:[],tags:[]}, chapters:{title:'Title',selected:{},rows:[{link:{href:'/title/c1',title:'Chapter 1'},dates:[]}]}, recommendations:[]}) : projection.fields.hero ? {title:'Title',hero:'Title'} : projection.fields.rows ?
       {title:'Title',selected:{},rows:[{link:{href:'/title/c1',title:'Chapter 1'},dates:[]}]} :
       {modernTitle:'Title',creation:[],modernRows:[],people:[],modernAlt:{},modalAlt:[],tags:[]}},
   });
@@ -59,4 +59,44 @@ test('GroupLe reader parses both init markers, static hosts, one-way signatures 
   assert.deepEqual(parseReader(`rm_h.readerDoInit([['ignored','',"/static/1.jpg"],['path/','https://resh.example/',"2.jpg"],['path/','https://one-way.work/',"3.jpg?sig=x"]]);`,'https://a.zazaza.me'),[
     {index:0,imageUrl:'https://a.zazaza.me/static/1.jpg'},{index:1,imageUrl:'https://h.example/path/2.jpg'},{index:2,imageUrl:'https://one-way.work/path/3.jpg'}]);
   assert.deepEqual(parseReader('alert("do not execute")','https://a.zazaza.me'),[]);
+});
+
+const signedReader = `<script>rm_h.readerInit(chapterInfo, [['https://bru.aaa200.rocks/','',"auto/1/0.webp?t=123&u=0&h=signature",720,378, ''],['https://eru.aaa200.rocks/','',"auto/1/1.png?t=123&u=0&h=second",720,1714, '']]);</script>`;
+
+test('AllHentai reads modern chapters without an avatar or an unnecessary HTML projection', async () => {
+  const requests = [];
+  const source = createGrouple({sourceId:'ru.nsfw.allhentai',baseUrl:'https://20.allhen.online',settings:{get:async()=>({})},
+    http:{request:async request=>{requests.push(request);return {body:requests.length===1 ? '<script>var user_hash = "reader-token";</script>' : signedReader};}},
+    html:{extract:async()=>assert.fail('A valid reader payload needs no avatar or HTML projection.')},
+  });
+  const pages = await source.getPages({mangaId:'title',chapterId:'/title/vol1/1?d=old#page=3'});
+  assert.deepEqual(pages,[
+    {index:0,imageUrl:'https://bru.aaa200.rocks/auto/1/0.webp?t=123&u=0&h=signature'},
+    {index:1,imageUrl:'https://eru.aaa200.rocks/auto/1/1.png?t=123&u=0&h=second'},
+  ]);
+  assert.equal(requests.length,2);
+  assert.equal(requests[1].url,'https://20.allhen.online/title/vol1/1?d=reader-token&mtr=true');
+  assert.equal(requests[1].headers.Referer,'https://20.allhen.online/');
+});
+
+test('AllHentai accepts a real reader served with HTTP 404 and no legacy avatar', async () => {
+  let requests = 0, projections = 0;
+  const source = createGrouple({sourceId:'ru.nsfw.allhentai',baseUrl:'https://20.allhen.online',settings:{get:async()=>({})},
+    http:{request:async()=>{if(++requests===1)return {body:'<title>Title</title>'};throw Object.assign(Error('404'),{code:'not_found',httpStatus:404,body:signedReader});}},
+    html:{extract:async()=>{projections++;return {title:'Chapter 1',content:'',hero:null};}},
+  });
+  assert.equal((await source.getPages({mangaId:'title',chapterId:'/title/vol1/1'})).length,2);
+  assert.equal(requests,2);
+  assert.equal(projections,1);
+});
+
+for (const [label,info,code,access] of [
+  ['anonymous login page',{title:'Вход',content:'Войдите, чтобы читать',hero:null},'auth_required',undefined],
+  ['premium page',{title:'Платный доступ',content:'Купить подписку',hero:null},'chapter_unavailable','paid'],
+  ['premium notice',{title:'Chapter 1',content:'Платный доступ — купить подписку',hero:null},'chapter_unavailable','paid'],
+]) test(`AllHentai reports ${label} without mistaking it for a readable chapter`, async () => {
+  const source = createGrouple({sourceId:'ru.nsfw.allhentai',baseUrl:'https://20.allhen.online',settings:{get:async()=>({})},
+    http:{request:async()=>({body:'<html>No reader payload</html>'})},html:{extract:async()=>info},
+  });
+  await assert.rejects(source.getPages({mangaId:'title',chapterId:'/title/vol1/1'}),error=>error.code===code && error.access?.type===access);
 });
