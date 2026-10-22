@@ -19,28 +19,25 @@ test('a valid title served with HTTP 404 is fetched once for details and chapter
   assert.equal(requests,1); assert.equal(titleExtracts,1);
 });
 
-test('AllHentai has its own Qawa SSO login, nested return URI and scoped session origins', () => {
+test('AllHentai opens its base URL for manual login and retains scoped Qawa session origins', () => {
   const definitions = sourceDefinitions(), allhentai = definitions.find(source => source.id === 'ru.nsfw.allhentai');
   const login = new URL(allhentai.auth.loginUrl);
-  assert.equal(login.origin,'https://z.qawa.org');
-  assert.equal(login.pathname,'/internal/auth/login');
-  assert.equal(login.searchParams.get('siteId'),'1');
-  assert.equal(login.searchParams.get('targetUri'),'/login/continueSso?siteId=1&targetUri=%2F');
-  const continuation = new URL(login.searchParams.get('targetUri'),login.origin);
-  assert.equal(continuation.pathname,'/login/continueSso');
-  assert.equal(continuation.searchParams.get('siteId'),'1');
-  assert.equal(continuation.searchParams.get('targetUri'),'/');
+  assert.equal(allhentai.auth.loginUrl,allhentai.baseUrl);
+  assert.equal(login.origin,'https://20.allhen.online');
+  assert.equal(login.pathname,'/');
+  assert.equal(login.search,'');
+  assert.equal(login.hash,'');
   assert.equal(allhentai.auth.profileId,'host.session.v1');
   assert.equal(allhentai.auth.completionUrl,allhentai.baseUrl);
   assert.equal(allhentai.auth.successUrl,'https://z.qawa.org/');
   assert.deepEqual(allhentai.auth.cookieOrigins,['https://20.allhen.online','https://allhen.online','https://z.qawa.org','https://qawa.org']);
   assert.deepEqual(allhentai.network.authOrigins,allhentai.auth.cookieOrigins);
-  assert.ok(allhentai.network.origins.includes(login.origin));
+  assert.ok(allhentai.network.origins.includes('https://z.qawa.org'));
   for (const source of definitions.filter(source => source.auth?.rules?.cookieAll?.includes('remember_me') && source.id !== 'ru.nsfw.allhentai')) {
     assert.equal(source.auth.loginUrl,'https://3.grouple.co/internal/auth/login');
     assert.equal(source.auth.successUrl,'https://3.grouple.co/');
     assert.ok(!source.auth.cookieOrigins.some(value => value.includes('qawa.org')));
-    assert.ok(!source.network.origins.includes(login.origin));
+    assert.ok(!source.network.origins.includes('https://z.qawa.org'));
   }
 });
 test('GroupLe API filters, repeated tri-state IDs, special status names and year bounds', () => {
