@@ -2,6 +2,7 @@
 const browse = ['browse','latest','search','filters'];
 const origin = host => `https://${host}`;
 const sourceBranding = {
+  "puremanga": {"icon":"assets/source_logos/puremanga.png","accentColor":"#F43F5E"},
   "hentailib": {
     "icon": "assets/source_logos/hentailib.png",
     "accentColor": "#E26C7A"
@@ -88,6 +89,11 @@ const senkuro = () => {
     template:'/manga/{id}',idPart:{separator:',,',index:1}});
 };
 export const registrations = [
+  source('ru.nsfw.puremanga','PureManga','v1.puremanga.me','sources/puremanga.mjs',{engine:'Inuko API/HTML JS',nsfw:true,custom:true,refresh:true,recommendations:true,
+    origins:['https://api.inuko.me'],images:['https://static.inuko.me'],template:'/{id}',encoding:'path',bindings:{tags:'genre'},parameters:{apiBaseUrl:'https://api.inuko.me/v2/',serviceName:'puremanga.me'},
+    network:{transportProfile:'host.platform.v1'},auth:{profileId:'host.cookie.v1',loginUrl:'https://v1.puremanga.me/',
+      cookieOrigins:['https://v1.puremanga.me','https://puremanga.me','https://sso.inuko.me','https://inuko.me','https://api.inuko.me'],rules:{cookieAll:['__otaku_session']},sessionExport:{headers:['Cookie'],values:[]}},
+    media:{transform:{algorithm:'xor',origin:'https://static.inuko.me',pathPrefix:'/chapters/',stemLength:36,markerOffset:14,marker:'x',key:[85,121,83,107,112,48,66,122,80,104,119,108,118,80,50,86]}}}),
   libgroup('ru.nsfw.hentailib','HentaiLib','hentailib.me',4,true),libgroup('ru.nsfw.yaoilib','YaoiLib','v2.shlib.life',2,true),
   grouple('ru.nsfw.allhentai','AllHentai','20.allhen.online',true),
   senkuro(),...['all','en','ru'].map(imhentai),

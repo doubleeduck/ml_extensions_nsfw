@@ -9,9 +9,9 @@ import {canonicalJson,packageZip,signedManifest,verifyPackage} from '../tools/pa
 test('Senkognito advertises the implemented latest capability', () => {
   assert.ok(registrations.find(s=>s.id==='ru.nsfw.senkognito').capabilities.includes('latest'));
 });
-test('unofficial package registers 10 NSFW IDs and its offline factories never perform IO', () => {
-  assert.equal(registrations.length,10); assert.equal(new Set(registrations.map(source => source.id)).size,10);
-  assert.deepEqual(registrations.map(source => source.id),["ru.nsfw.hentailib","ru.nsfw.yaoilib","ru.nsfw.allhentai","ru.nsfw.senkognito","all.nsfw.imhentai","en.nsfw.imhentai","ru.nsfw.imhentai","all.nsfw.pururin","ru.nsfw.hchan","ru.nsfw.nudemoon"]);
+test('unofficial package registers 11 NSFW IDs and its offline factories never perform IO', () => {
+  assert.equal(registrations.length,11); assert.equal(new Set(registrations.map(source => source.id)).size,11);
+  assert.deepEqual(registrations.map(source => source.id),["ru.nsfw.puremanga","ru.nsfw.hentailib","ru.nsfw.yaoilib","ru.nsfw.allhentai","ru.nsfw.senkognito","all.nsfw.imhentai","en.nsfw.imhentai","ru.nsfw.imhentai","all.nsfw.pururin","ru.nsfw.hchan","ru.nsfw.nudemoon"]);
   assert.ok(registrations.every(source => source.isNsfw === true));
   assert.equal(manifestDefinition({version:'1.0.0',publisherKeyId:'fixture'}).extensionId,'official.mangalaunch.nsfw.sources');
   const deny = () => { throw Error('Factory must not perform IO.'); };
@@ -28,7 +28,7 @@ test('unofficial ZIP/signature payload is reproducible and rejects tampering ind
   for (const definition of registrations) payload.set(definition.branding.icon,Buffer.from('Fixture image bytes'));
   const signed = signedManifest(manifestDefinition({version:'1.0.0',publisherKeyId:'test-generated'}),payload,pem);
   const files = new Map([['manifest.json',signed.bytes],['signature.ed25519',signed.signature],...payload]), first = packageZip(files), second = packageZip(new Map([...files].reverse()));
-  assert.deepEqual(first,second); assert.equal(verifyPackage(first,signed.publicKey).sources.length,10);
+  assert.deepEqual(first,second); assert.equal(verifyPackage(first,signed.publicKey).sources.length,11);
   const corrupt = Buffer.from(first); corrupt[40] ^= 1; assert.throws(() => verifyPackage(corrupt,signed.publicKey));
   assert.equal(canonicalJson({z:1,a:{b:2,a:3}}),'{"a":{"a":3,"b":2},"z":1}');
 });

@@ -1,3 +1,4 @@
+import createPureManga from './sources/puremanga.mjs';
 import createLibGroup from './engines/libgroup.mjs';
 import createGrouple from './engines/grouple.mjs';
 import createSenkuro from './engines/senkuro.mjs';
@@ -7,6 +8,7 @@ import createChan from './engines/chan.mjs';
 import createNudeMoon from './sources/nudemoon.mjs';
 
 const factories = new Map([
+  ['ru.nsfw.puremanga',createPureManga],
   ['ru.nsfw.hentailib',createLibGroup],
   ['ru.nsfw.yaoilib',createLibGroup],
   ['ru.nsfw.allhentai',createGrouple],
