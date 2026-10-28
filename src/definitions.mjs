@@ -2,6 +2,8 @@
 const browse = ['browse','latest','search','filters'];
 const origin = host => `https://${host}`;
 const sourceBranding = {
+  "threehentai": {"icon":"assets/source_logos/threehentai.png","accentColor":"#F15A70"},
+  "nhentaito": {"icon":"assets/source_logos/nhentaito.png","accentColor":"#ED2553"},
   "hentailib": {
     "icon": "assets/source_logos/hentailib.png",
     "accentColor": "#E26C7A"
@@ -88,6 +90,11 @@ const senkuro = () => {
     template:'/manga/{id}',idPart:{separator:',,',index:1}});
 };
 export const registrations = [
+  source('all.nsfw.threehentai','3Hentai','3hentai.net','sources/threehentai.mjs',{nsfw:true,custom:true,recommendations:true,template:'/d/{id}',
+    auth:{...cookieAuth('3hentai.net','/login'),cookieOrigins:['3hentai.net','ru.3hentai.net','es.3hentai.net','fr.3hentai.net','it.3hentai.net','pt.3hentai.net'].map(origin)},
+    bindings:{tags:'tags',artist:'artists',author:'groups'},network:{transportProfile:'host.platform.v1'}}),
+  source('all.nsfw.nhentaito','nhentai.to','nhentai.to','sources/nhentaito.mjs',{nsfw:true,custom:true,recommendations:true,template:'/g/{id}/',
+    auth:cookieAuth('nhentai.to','/login/'),images:['https://supercdn.site'],bindings:{tags:'tags',artist:'artists',author:'groups'},network:{transportProfile:'host.platform.v1'}}),
   libgroup('ru.nsfw.hentailib','HentaiLib','hentailib.me',4,true),libgroup('ru.nsfw.yaoilib','YaoiLib','v2.shlib.life',2,true),
   grouple('ru.nsfw.allhentai','AllHentai','20.allhen.online',true),
   senkuro(),...['all','en','ru'].map(imhentai),

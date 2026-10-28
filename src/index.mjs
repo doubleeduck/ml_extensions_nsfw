@@ -1,4 +1,6 @@
 import createLibGroup from './engines/libgroup.mjs';
+import createThreeHentai from './sources/threehentai.mjs';
+import createNhentaiTo from './sources/nhentaito.mjs';
 import createGrouple from './engines/grouple.mjs';
 import createSenkuro from './engines/senkuro.mjs';
 import createIMHentai from './sources/imhentai.mjs';
@@ -7,6 +9,8 @@ import createChan from './engines/chan.mjs';
 import createNudeMoon from './sources/nudemoon.mjs';
 
 const factories = new Map([
+  ['all.nsfw.threehentai',createThreeHentai],
+  ['all.nsfw.nhentaito',createNhentaiTo],
   ['ru.nsfw.hentailib',createLibGroup],
   ['ru.nsfw.yaoilib',createLibGroup],
   ['ru.nsfw.allhentai',createGrouple],
