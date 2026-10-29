@@ -1,6 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import createThree,{catalogUrl as threeUrl,pages as threePages,selectListing} from '../src/sources/threehentai.mjs';
-import createNh,{catalogUrl as nhUrl,details as nhDetails,pages as nhPages,galleryData} from '../src/sources/nhentaito.mjs';
+import createNh,{catalogUrl as nhUrl,details as nhDetails,pages as nhPages,galleryData,buildFilters as nhFilters} from '../src/sources/nhentaito.mjs';
+import {classFlagData,tagFlagData,languageFlagData} from '../src/core/gallery_flags.mjs';
 import {sourceDefinitions} from '../src/definitions.mjs';
 import {galleryFilters,listing,numericId} from '../src/core/gallery.mjs';
 
@@ -36,8 +37,11 @@ test('listing keeps real lazy covers, language-neutral IDs and removes repeated/
  const result=listing([row,row,{href:'/out/ad',title:'Ad'}],nhBase,'g');assert.equal(result.length,1);assert.equal(result[0].id,'7');assert.equal(result[0].coverUrl,row.image.lazy);
 });
 test('3Hentai combines language, quoted taxonomy exclusions, title search, sorting and pagination',()=>{
- const u=new URL(threeUrl(threeBase,{searchTerm:'Some title',page:2,selectedFilters:{language:['english'],tags:['full color, -other'],sort:['popular']}}));assert.equal(u.pathname,'/search');assert.equal(u.searchParams.get('q'),'Some title language:english tag:"full color" -tag:"other"');assert.equal(u.searchParams.get('sort'),'popular');assert.equal(u.searchParams.get('page'),'2');
- assert.equal(threeUrl(threeBase,{page:2},'popular'),null);assert.equal(new URL(threeUrl(threeBase,{page:2},'latest')).pathname,'/2');
+ const u=new URL(threeUrl(threeBase,{searchTerm:'Some title',page:2,selectedFilters:{language:['english'],tags:['full color, -other'],sort:['popular']}}));assert.equal(u.pathname,'/search');assert.equal(u.searchParams.get('q'),'Some title lang:english tag:"full color" -tag:"other"');assert.equal(u.searchParams.get('sort'),'popular');assert.equal(u.searchParams.get('page'),'2');
+ const popular=new URL(threeUrl(threeBase,{page:2},'popular'));assert.equal(popular.pathname,'/search');assert.equal(popular.searchParams.get('q'),'pages:>0');assert.equal(popular.searchParams.get('sort'),'popular');assert.equal(popular.searchParams.get('page'),'2');
+ const sorted=new URL(threeUrl(threeBase,{selectedFilters:{sort:['popular']}}));assert.equal(sorted.searchParams.get('q'),'pages:>0');
+ const taxonomy=new URL(threeUrl(threeBase,{selectedFilters:{artists:['Artist'],parodies:['Series']}}));assert.equal(taxonomy.searchParams.get('q'),'user:"Artist" serie:"Series"');
+ assert.equal(new URL(threeUrl(threeBase,{page:2},'latest')).pathname,'/2');
 });
 test('3Hentai reads the full base64 reader map with original mixed formats and validates every page',()=>{
  assert.deepEqual(threePages([readerScript(threeReader)],'7').map(p=>p.imageUrl),['https://s1.3hentai.net/d99/1.jpg','https://s1.3hentai.net/d99/2.webp']);
@@ -45,16 +49,35 @@ test('3Hentai reads the full base64 reader map with original mixed formats and v
  assert.throws(()=>threePages(['var readerPages=evil()'],'7'),e=>e.code==='parse_error');
  assert.equal(threePages([readerScript({...threeReader,baseUriImg:'https://mirror.example/media/%s'})],'7','https://mirror.example')[0].imageUrl,'https://mirror.example/media/1.jpg');
 });
-test('3Hentai separates homepage popularity from latest without requiring unsupported CSS negation',()=>{
+test('3Hentai reads the full catalog group for popular searches and excludes the homepage teaser',()=>{
  const groups=[{class:'listing-container container-xl text-center',items:[{id:'popular'}]},{class:'listing-container container-xl',items:[{id:'latest'}]}];
- assert.deepEqual(selectListing(groups,'latest'),[{id:'latest'}]);assert.deepEqual(selectListing(groups,'popular'),[{id:'popular'}]);assert.deepEqual(selectListing(groups,'search',{selectedFilters:{sort:['popular']}}),[{id:'popular'}]);
- assert.deepEqual(selectListing([{class:'listing-container bg-container container-xl',items:[{id:'filtered'}]}],'search',{selectedFilters:{sort:['popular'],language:['english']}}),[{id:'filtered'}]);
+ for(const mode of ['latest','popular','search'])assert.deepEqual(selectListing(groups,mode).map(row=>row.id),['latest']);
+ assert.deepEqual(selectListing([{class:'listing-container bg-container container-xl',items:[{id:'filtered'}]}],'search',{selectedFilters:{sort:['popular'],language:['english']}}).map(row=>row.id),['filtered']);
 });
 test('nhentai.to uses the exact language/category/tag route instead of the unsupported namespace search',()=>{
  assert.equal(new URL(nhUrl(nhBase,{page:2,selectedFilters:{language:['russian']}})).pathname,'/language/russian/');assert.equal(new URL(nhUrl(nhBase,{selectedFilters:{tags:['full color']}})).pathname,'/tag/full-color/');
  assert.equal(new URL(nhUrl(nhBase,{searchTerm:'Title',page:2})).searchParams.get('q'),'Title');assert.equal(new URL(nhUrl(nhBase,{},'latest')).pathname,'/go');assert.equal(new URL(nhUrl(nhBase,{},'popular')).pathname,'/popular');
  for(const selectedFilters of [{language:['english'],tags:['full color']},{language:['english'],sort:['popular']},{tags:['-other']},{tags:['one,two']}])assert.throws(()=>nhUrl(nhBase,{selectedFilters}),e=>e.code==='unsupported');
- assert.throws(()=>nhUrl(nhBase,{searchTerm:'Title',selectedFilters:{language:['english']}}),e=>e.code==='unsupported');
+ assert.throws(()=>nhUrl(nhBase,{searchTerm:'Title',selectedFilters:{tags:['full color']}}),e=>e.code==='unsupported');
+});
+
+test('nhentai.to uses the actual combined search form parameters, including pagination',()=>{
+ const url=new URL(nhUrl(nhBase,{searchTerm:'Full color',page:2,selectedFilters:{language:['english'],sort:['popular'],min_pages:['20'],max_pages:['40'],exclude:['western, other']}}));
+ assert.equal(url.pathname,'/search/');assert.deepEqual(Object.fromEntries(url.searchParams),{q:'Full color',page:'2',sort:'most-favorited',lang:'english',min_pages:'20',max_pages:'40',exclude:'western, other'});
+ for(const [value,expected] of [['latest','newest'],['most-liked','most-liked'],['relevance','relevance']])assert.equal(new URL(nhUrl(nhBase,{searchTerm:'Title',selectedFilters:{sort:[value]}})).searchParams.get('sort'),expected);
+ for(const selectedFilters of [{min_pages:['-1']},{min_pages:['bad']},{min_pages:['40'],max_pages:['20']}])assert.throws(()=>nhUrl(nhBase,{searchTerm:'Title',selectedFilters}),e=>e.code==='parse_error');
+ assert.ok(nhFilters().find(row=>row.key==='exclude'));assert.equal(nhFilters().find(row=>row.key==='sort').supportsDirection,false);
+ assert.throws(()=>nhUrl(nhBase,{searchTerm:'Title',selectedFilters:{language:['russian']}}),e=>e.code==='unsupported');
+});
+
+test('gallery flags come from exact class/tag tokens and small packaged PNG data',()=>{
+ for(const [classes,language] of [['doujin flag flag-rus','russian'],['flag-en','english'],['flag-jpn','japanese']])assert.equal(classFlagData(classes),languageFlagData(language));
+ assert.equal(tagFlagData('22 19 17'),languageFlagData('english'));assert.equal(tagFlagData('2 17'),languageFlagData('japanese'));assert.equal(tagFlagData('10197'),languageFlagData('chinese'));
+ assert.equal(tagFlagData('119 200'),null);assert.equal(classFlagData('flag-unknown'),null);
+ assert.equal(tagFlagData('2 19'),languageFlagData('english'));assert.equal(tagFlagData('85195 17'),languageFlagData('russian'));assert.equal(tagFlagData('84916'),languageFlagData('korean'));
+ for(const language of ['english','japanese','chinese','russian','korean','spanish','french','italian','portuguese']){const uri=languageFlagData(language);assert.match(uri,/^data:image\/png;base64,/u);const bytes=Buffer.from(uri.split(',')[1],'base64');assert.ok(bytes.length<=4096);assert.equal(bytes.readUInt32BE(16),100);assert.equal(bytes.readUInt32BE(20),67);}
+ const rows=listing(selectListing([{class:'listing-container',items:[{...row,href:'/d/7',class:'doujin flag flag-rus'}]}]),threeBase,'d');assert.equal(rows[0].languageFlagData,languageFlagData('russian'));
+ assert.equal(nhDetails(nhTitle,'7',nhBase).info.languageFlagData,languageFlagData('english'));
 });
 test('nhentai.to data parser tolerates the site trailing comma but never executes constructors or trailing JavaScript',()=>{
  assert.deepEqual(galleryData([nhScript(gallery)]),gallery);

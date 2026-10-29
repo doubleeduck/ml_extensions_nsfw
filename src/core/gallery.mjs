@@ -24,7 +24,7 @@ export function listing(rows,base,prefix) {
   for(const row of requireArray(rows,'Gallery listing')) {
     let id;try{id=numericId(row.href,prefix);}catch{continue;}
     const title=normalizeText(row.title??record(row.image).alt),coverUrl=imageUrl(row.image,base);
-    if(!title||!coverUrl||seen.has(id))continue;seen.add(id);items.push(manga({id,title,coverUrl,ageRating:'18+'}));
+    if(!title||!coverUrl||seen.has(id))continue;seen.add(id);items.push(manga({id,title,coverUrl,languageFlagData:row.languageFlagData??null,ageRating:'18+'}));
   }
   return items;
 }

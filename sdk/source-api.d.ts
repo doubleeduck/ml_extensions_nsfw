@@ -18,6 +18,9 @@ export interface MangaDto {
   secondaryTitle:string|null; author:string|null; artist:string|null;
   status:string|null; type:string|null; ageRating:string|null; rating:number|null;
   releaseYear:string|null; pageCount:number|null; languageFlagUrl:string|null; tags:string[];
+  /** Optional static PNG data URI, <=4 KiB decoded and <=256x128; no HTTP request.
+   * Older hosts ignore this additive field. languageFlagUrl remains HTTPS-only. */
+  languageFlagData?:string|null;
 }
 export interface ChapterAccessDto {
   type:'available'|'temporarilyUnavailable'|'paid'; availableAt:string|null;
