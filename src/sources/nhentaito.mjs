@@ -41,7 +41,20 @@ export function catalogUrl(base,{page=1,searchTerm='',selectedFilters={}}={},mod
   return urlWithQuery(sort==='popular'?'/popular':'/go',base,{page:current});
 }
 const tile={href:{selector:'a.cover',attr:'href'},title:{selector:'.caption',text:true},image:picture,languageTags:{attr:'data-tags'}};
-const withFlags=rows=>requireArray(rows,'nhentai.to cards').map(row=>({...row,languageFlagData:tagFlagData(row.languageTags)}));
+// The mirror's supercdn.site URLs time out or return 404 for files still served
+// by the original CDN. Media IDs and extensions are shared; resolve them once
+// while parsing instead of probing/retrying every native image request.
+function mediaUrl(raw,base,page=false) {
+  const value=imageUrl(raw,base);if(!value)return null;
+  const url=new URL(value);
+  if(['supercdn.site','t.nhentai.net','i.nhentai.net'].includes(url.hostname)&&
+    /^\/galleries\/[1-9]\d*\/(?:cover|thumb|[1-9]\d*t?)\.(?:jpg|png|gif|webp|avif)$/u.test(url.pathname)) {
+    url.hostname=page?'i.nhentai.net':'t.nhentai.net';
+    url.port='';
+  }
+  return url.href;
+}
+const withFlags=(rows,base)=>requireArray(rows,'nhentai.to cards').map(row=>({...row,image:mediaUrl(row.image,base),languageFlagData:tagFlagData(row.languageTags)}));
 const detailsProjection={fields:{cover:{selector:'#cover img',fields:picture.fields},scripts,related:{selector:'.index-mlt .gallery',all:true,fields:tile}}};
 // Parse only the data literal. Never execute the remote N.gallery constructor.
 export function galleryData(input) {
@@ -63,9 +76,9 @@ export function details(input,id,base) {
   if(!title)throw parseError('nhentai.to title is missing.');
   const tags=requireArray(gallery.tags,'nhentai.to tags'),values=type=>tags.filter(tag=>tag.type===type).map(tag=>normalizeText(tag.name)).filter(Boolean),count=Number(gallery.num_pages);
   if(!Number.isInteger(count)||count<1)throw parseError('Invalid nhentai.to page count.');
-  const coverUrl=imageUrl(data.cover,base);if(!coverUrl)throw parseError('nhentai.to cover is missing.');
+  const coverUrl=mediaUrl(data.cover,base);if(!coverUrl)throw parseError('nhentai.to cover is missing.');
   return {gallery,info:manga({id,title,secondaryTitle:string(names.japanese),coverUrl,languageFlagData:values('language').map(languageFlagData).find(Boolean)??null,pageCount:count,artist:values('artist').join(', ')||null,author:values('group').join(', ')||values('artist').join(', ')||null,
-    type:values('category')[0]??null,tags:values('tag'),ageRating:'18+',status:'completed',description:[values('language').join(', '),`Страниц: ${count}`].filter(Boolean).join('\n')}),related:listing(withFlags(data.related),base,'g').filter(row=>row.id!==id)};
+    type:values('category')[0]??null,tags:values('tag'),ageRating:'18+',status:'completed',description:[values('language').join(', '),`Страниц: ${count}`].filter(Boolean).join('\n')}),related:listing(withFlags(data.related,base),base,'g').filter(row=>row.id!==id)};
 }
 export function pages(data) {
   const gallery=data.gallery,raw=record(gallery.images).pages;
@@ -74,7 +87,7 @@ export function pages(data) {
   const cover=new URL(data.info.coverUrl),media=String(gallery.media_id);
   if(!/^\d+$/u.test(media)||!cover.pathname.startsWith(`/galleries/${media}/`))throw parseError('Mismatched nhentai.to media origin.');
   return descriptors.map((row,index)=>{const extension={j:'jpg',p:'png',g:'gif',w:'webp',a:'avif'}[row.t];if(!extension)throw parseError('Unknown nhentai.to page format.');
-    const image=new URL(cover.href);image.pathname=`/galleries/${media}/${index+1}.${extension}`;return {index,imageUrl:image.href};});
+    const image=new URL(cover.href);image.pathname=`/galleries/${media}/${index+1}.${extension}`;return {index,imageUrl:mediaUrl(image.href,cover.origin,true)};});
 }
-export default ctx=>createGallery(ctx,{prefix:'g',url:catalogUrl,filters:buildFilters,listingProjection:{all:true,fields:tile},items:withFlags,
+export default ctx=>createGallery(ctx,{prefix:'g',url:catalogUrl,filters:buildFilters,listingProjection:{all:true,fields:tile},items:rows=>withFlags(rows,ctx.baseUrl),
   selector:(mode,query)=>mode==='latest'||mode==='search'&&!query.searchTerm?.trim()&&!(query.selectedFilters?.sort?.[0]==='popular')&&!Object.entries(query.selectedFilters??{}).some(([key,value])=>key!=='sort'&&value.length)?'.index-latest .gallery':'.index-container .gallery',detailsProjection,details,pages});

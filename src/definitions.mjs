@@ -94,7 +94,7 @@ export const registrations = [
     auth:{...cookieAuth('3hentai.net','/login'),cookieOrigins:['3hentai.net','ru.3hentai.net','es.3hentai.net','fr.3hentai.net','it.3hentai.net','pt.3hentai.net'].map(origin)},
     bindings:{tags:'tags',artist:'artists',author:'groups'},network:{transportProfile:'host.platform.v1'}}),
   source('all.nsfw.nhentaito','nhentai.to','nhentai.to','sources/nhentaito.mjs',{nsfw:true,custom:true,recommendations:true,template:'/g/{id}/',
-    auth:cookieAuth('nhentai.to','/login/'),images:['https://supercdn.site'],bindings:{tags:'tags',artist:'artists',author:'groups'},network:{transportProfile:'host.platform.v1'}}),
+    auth:cookieAuth('nhentai.to','/login/'),images:['https://supercdn.site','https://t.nhentai.net','https://i.nhentai.net'],bindings:{tags:'tags',artist:'artists',author:'groups'},network:{transportProfile:'host.platform.v1'}}),
   libgroup('ru.nsfw.hentailib','HentaiLib','hentailib.me',4,true),libgroup('ru.nsfw.yaoilib','YaoiLib','v2.shlib.life',2,true),
   grouple('ru.nsfw.allhentai','AllHentai','20.allhen.online',true),
   senkuro(),...['all','en','ru'].map(imhentai),

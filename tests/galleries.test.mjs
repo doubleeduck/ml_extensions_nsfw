@@ -23,7 +23,7 @@ function fixture(kind,{fail=false}={}) {
 
 test('both multilingual sources have exactly one all-language registration, packaged icons and proper CDN grants',()=>{
  const definitions=sourceDefinitions();for(const key of ['threehentai','nhentaito']){const matches=definitions.filter(d=>d.id.endsWith('.'+key));assert.equal(matches.length,1);const d=matches[0];assert.equal(d.language,'all');assert.equal(d.isNsfw,true);assert.ok(d.features.auth&&d.features.recommendations&&d.supportsCustomBaseUrl);assert.equal(d.network.transportProfile,'host.platform.v1');assert.equal(d.branding.icon,`assets/source_logos/${key}.png`);}
- assert.ok(definitions.find(d=>d.id==='all.nsfw.nhentaito').network.imageOrigins.includes('https://supercdn.site'));
+ for(const host of ['supercdn.site','t.nhentai.net','i.nhentai.net'])assert.ok(definitions.find(d=>d.id==='all.nsfw.nhentaito').network.imageOrigins.includes('https://'+host));
  assert.ok(definitions.find(d=>d.id==='all.nsfw.threehentai').auth.cookieOrigins.includes('https://ru.3hentai.net'));
 });
 test('gallery language filtering is optional and single-select; sorting never exposes a false direction',()=>{
@@ -86,8 +86,28 @@ test('nhentai.to data parser tolerates the site trailing comma but never execute
 });
 test('nhentai.to pages use descriptor order instead of shifted PHP array keys and never use thumbnails',()=>{
  const data=nhDetails(nhTitle,'7',nhBase);assert.equal(data.info.pageCount,2);assert.equal(data.info.artist,'Writer');assert.deepEqual(data.info.tags,['Full color']);assert.deepEqual(data.related.map(i=>i.id),['8']);
- assert.deepEqual(nhPages(data).map(p=>p.imageUrl),['https://supercdn.site/galleries/99/1.jpg','https://supercdn.site/galleries/99/2.webp']);
+ assert.equal(data.info.coverUrl,'https://t.nhentai.net/galleries/99/cover.jpg');
+ assert.equal(data.related[0].coverUrl,'https://t.nhentai.net/galleries/99/thumb.jpg');
+ assert.deepEqual(nhPages(data).map(p=>p.imageUrl),['https://i.nhentai.net/galleries/99/1.jpg','https://i.nhentai.net/galleries/99/2.webp']);
  assert.throws(()=>nhPages({...data,info:{...data.info,pageCount:3}}),e=>e.code==='parse_error');assert.throws(()=>nhPages({...data,gallery:{...gallery,images:{pages:[{t:'unknown'},{t:'w'}]}}}),e=>e.code==='parse_error');
+});
+
+test('nhentai.to catalog resolves original CDN covers without extra image requests',async()=>{
+ const {source,calls}=fixture('nh');
+ for(const read of [()=>source.getPopular(),()=>source.getLatest(),()=>source.search({searchTerm:'demo'})]){
+  const before=calls.length,items=await read();assert.equal(calls.length,before+1);
+  assert.equal(items[0].coverUrl,'https://t.nhentai.net/galleries/99/thumb.jpg');
+ }
+});
+
+test('nhentai.to preserves independent mirror media and all full-page descriptor formats',()=>{
+ const formats=['j','p','g','w','a'],data=nhDetails({...nhTitle,cover:{src:'https://mirror.example/galleries/99/cover.png'},
+  scripts:[nhScript({...gallery,num_pages:formats.length,images:{pages:formats.map(t=>({t}))}})]},'7','https://mirror.example');
+ assert.equal(data.info.coverUrl,'https://mirror.example/galleries/99/cover.png');
+ assert.deepEqual(nhPages(data).map(p=>p.imageUrl),['jpg','png','gif','webp','avif'].map((ext,i)=>`https://mirror.example/galleries/99/${i+1}.${ext}`));
+ for(const cover of [{src:'https://supercdn.site/unrelated/cover.jpg'},{src:'https://supercdn.site.evil.example/galleries/99/cover.jpg'}]){
+  assert.equal(nhDetails({...nhTitle,cover},'7',nhBase).info.coverUrl,cover.src);
+ }
 });
 for(const kind of ['three','nh'])test(`${kind}: details, chapters and recommendations share one title read; failures are retryable`,async()=>{
  const {source,calls}=fixture(kind,{fail:true});await assert.rejects(source.getDetails({mangaId:'7'}),e=>e.code==='offline');const [d,c]=await Promise.all([source.getDetails({mangaId:'7'}),source.getChapters({mangaId:'7'})]);await source.getRecommendations({mangaId:'7'});assert.equal(c.length,1);assert.equal(d.id,'7');assert.equal(calls.length,2);
