@@ -14,6 +14,8 @@ test('Nude Moon registration declares adult Russian reading, scoped auth/media a
   assert.deepEqual(source.network.origins,['https://nude-moon.org']);
   assert.deepEqual(source.network.imageOrigins,['https://nude-moon.org']);
   assert.equal(source.network.transportProfile,'host.platform.v1');
+  assert.equal(source.network.userAgentProfile,'browser');
+  assert.equal(source.media.userAgentProfile,'browser');
   assert.deepEqual(source.auth.cookieOrigins,['https://nude-moon.org']);
   assert.equal(source.auth.loginUrl,'https://nude-moon.org/');
   assert.equal(source.web.mangaUrlTemplate,'/{id}-manga.html');
@@ -152,4 +154,22 @@ test('Nude Moon invalid IDs and absent reader links fail; HTTP/auth/challenge er
     await assert.rejects(createNudeMoon(ctx).getLatest(),{code});
   }
   const empty = context({reply:() => ({body:''})}); await assert.rejects(createNudeMoon(empty.ctx).getLatest(),{code:'invalid_response'});
+});
+
+test('Nude Moon HTTP-200 Cloudflare challenges never enter parsing or become cached tags',async()=>{
+ let calls=0;
+ const {ctx,projections}=context({reply:()=>({body:++calls===1?'<html><title>Один момент…</title></html>':'ok'}),extract:()=>({tags:[{href:'/tags/demo+',label:'Demo'}]})});
+ const source=createNudeMoon(ctx);
+ await assert.rejects(source.getFilters(),error=>error.code==='challenge_required'&&error.phase==='http');
+ assert.equal(projections.length,0);
+ assert.ok((await source.getFilters()).find(filter=>filter.key==='tags').options.length);
+ assert.equal(calls,2);
+ for(const body of ['<title>Just a moment...</title>','<title>Attention Required! | Cloudflare</title>']){
+  const fixture=context({reply:()=>({body}),extract:()=>{throw Error('Must not parse a challenge');}});
+  await assert.rejects(createNudeMoon(fixture.ctx).getLatest(),{code:'challenge_required'});
+ }
+ const marked=context({reply:()=>({body:'verification',headers:{'cf-mitigated':'challenge'}})});
+ await assert.rejects(createNudeMoon(marked.ctx).getLatest(),{code:'challenge_required'});
+ const legitimate=context({reply:()=>({body:'<title>Один момент — Nude-Moon</title>'}),extract:()=>listing});
+ assert.equal((await createNudeMoon(legitimate.ctx).getLatest()).length,1);
 });

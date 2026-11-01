@@ -100,7 +100,7 @@ export const registrations = [
   senkuro(),...['all','en','ru'].map(imhentai),
   source('all.nsfw.pururin','Pururin','pururin.me','sources/pururin.mjs',{nsfw:true,template:'/{id}',encoding:'path',images:['https://pururin.me'],bindings:{author:'circles',artist:'artists',tags:'tags'}}),
   source('ru.nsfw.hchan','H-chan','x2.h-chan.me','engines/chan.mjs',{nsfw:true,custom:true,recommendations:true,capabilities:['latest','search','filters'],template:'/{id}',encoding:'path',images:['https://h-chan.me'],bindings:{tags:'tags'},presentation:{coverFit:'contain'}}),
-  source('ru.nsfw.nudemoon','Nude Moon','nude-moon.org','sources/nudemoon.mjs',{nsfw:true,refresh:true,bindings:{tags:'tags'},auth:cookieAuth('nude-moon.org','/'),template:'/{id}-manga.html',network:{transportProfile:'host.platform.v1'}}),
+  source('ru.nsfw.nudemoon','Nude Moon','nude-moon.org','sources/nudemoon.mjs',{nsfw:true,refresh:true,bindings:{tags:'tags'},auth:cookieAuth('nude-moon.org','/'),template:'/{id}-manga.html',network:{transportProfile:'host.platform.v1',userAgentProfile:'browser'}}),
 ];
 export function sourceDefinitions() { return registrations.map(({_module,...definition}) => definition); }
 export function manifestDefinition({version,publisherKeyId}) {

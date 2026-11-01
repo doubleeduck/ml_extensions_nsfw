@@ -126,6 +126,9 @@ export default function createNudeMoon(ctx) {
     const response = await ctx.http.request({method:'GET',url,responseType:'text',userAgentProfile:'browser',
       headers:{Accept:'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',Referer:`${base}/`}});
     if (typeof response.body !== 'string' || !response.body.trim()) throw Object.assign(Error('Empty Nude Moon response.'),{code:'invalid_response',phase:'http'});
+    if(response.headers?.['cf-mitigated']==='challenge'||/<title[^>]*>\s*(?:(?:Just a moment|Один момент)[.!…\s]*|Attention Required!?(?:\s*\|\s*Cloudflare)?)\s*<\/title>/iu.test(response.body)) {
+      throw Object.assign(Error('Nude Moon browser verification is required.'),{code:'challenge_required',phase:'http'});
+    }
     return ctx.html.extract(response.body,{...projection,baseUrl:response.url ?? url});
   }
   const details = recent(id => html(`${base}/${requireId(id)}-manga.html`,detailsProjection));
