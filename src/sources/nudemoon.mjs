@@ -1,5 +1,5 @@
 import {chapter,filter,manga,normalizeText,parseError,record,string} from '../core/data.mjs';
-import {requireArray,requireRecord,urlWithQuery} from '../core/http.mjs';
+import {requireArray,requireHtmlBody,requireRecord,urlWithQuery} from '../core/http.mjs';
 import {recent} from '../core/recent.mjs';
 
 const base = 'https://nude-moon.org';
@@ -91,20 +91,26 @@ export function parseListing(input) {
   return result;
 }
 export const detailsProjection = {fields:{title:text('h1'),cover:{selector:'meta[property="og:image"]',attr:'content'},
-  description:text('table.shoutbox .description'),authors:{selector:'table.shoutbox a[href*="mangaka/"]',all:true,text:true},
-  tags:{selector:'table.shoutbox .tag-links a',all:true,text:true},metadata:{selector:'table.shoutbox .tbl2',all:true,text:true,exclude:'script'},
-  reader:{selector:'a[href*="-online-"]',attr:'href'}}};
+  // Both templates have one tag block. Its fourth ancestor is the desktop
+  // table body or the mobile metadata table, excluding unrelated title cards.
+  info:{selector:'.tag-links',ascend:4,fields:{description:text('.description'),
+    authors:{selector:'a[href*="mangaka/"]',all:true,text:true},tags:{selector:'.tag-links a',all:true,text:true},
+    metadata:{text:true,exclude:'script,.description,.tag-links'}}},
+  reader:{selector:'a[href*="-online-"]',attr:'href'},
+  loginRequired:{selector:'img[src$="/login_err.png"]',attr:'src'},
+  images:{selector:'img.border[src*="/manga/"], img.border[data-src*="/manga/"]',all:true,fields:imageFields}}};
 export function parseDetails(input,id) {
   const data = requireRecord(input,'Nude Moon details'), title = normalizeText(data.title);
   if (!title) throw parseError('Nude Moon title is missing.');
-  const metadata = requireArray(data.metadata,'Nude Moon metadata').map(normalizeText).join(' '), count = metadata.match(/Страниц:\s*(\d+)/iu);
-  const authors = [...new Set(requireArray(data.authors,'Nude Moon authors').map(normalizeText).filter(Boolean))].join(', ') || null;
-  return manga({id:requireId(id),title,coverUrl:resolve(data.cover),description:string(normalizeText(data.description)),author:authors,artist:authors,
-    ageRating:'18+',pageCount:count ? Number(count[1]) : null,tags:[...new Set(requireArray(data.tags,'Nude Moon tags').map(normalizeText).filter(Boolean))]});
+  const info = requireRecord(data.info,'Nude Moon title metadata'), count = normalizeText(info.metadata).match(/Страниц:\s*(\d+)/iu);
+  const authors = [...new Set(requireArray(info.authors,'Nude Moon authors').map(normalizeText).filter(Boolean))].join(', ') || null;
+  const inlineCount = new Set(requireArray(data.images,'Nude Moon inline images').map(cover).filter(Boolean)).size;
+  return manga({id:requireId(id),title,coverUrl:resolve(data.cover),description:string(normalizeText(info.description)),author:authors,artist:authors,
+    ageRating:'18+',pageCount:count ? Number(count[1]) : inlineCount || null,tags:[...new Set(requireArray(info.tags,'Nude Moon tags').map(normalizeText).filter(Boolean))]});
 }
 const months = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
 function uploadDate(metadata) {
-  const match = metadata.match(/Дата:\s*(\d{1,2})\s+([а-яё]+)\s+(\d{4})/iu), month = match ? months.indexOf(match[2].toLowerCase()) : -1;
+  const match = metadata.match(/(?:Дата:\s*)?(\d{1,2})\s+([а-яё]+)\s+(\d{4})/iu), month = match ? months.indexOf(match[2].toLowerCase()) : -1;
   if (!match || month < 0) return null;
   const year = Number(match[3]), day = Number(match[1]), date = new Date(Date.UTC(year,month,day));
   return date.getUTCMonth() === month && date.getUTCDate() === day ? date.toISOString() : null;
@@ -125,13 +131,13 @@ export default function createNudeMoon(ctx) {
     // The HTTP host decodes the site's declared Windows-1251 charset.
     const response = await ctx.http.request({method:'GET',url,responseType:'text',userAgentProfile:'browser',
       headers:{Accept:'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',Referer:`${base}/`}});
-    if (typeof response.body !== 'string' || !response.body.trim()) throw Object.assign(Error('Empty Nude Moon response.'),{code:'invalid_response',phase:'http'});
-    if(response.headers?.['cf-mitigated']==='challenge'||/<title[^>]*>\s*(?:(?:Just a moment|Один момент)[.!…\s]*|Attention Required!?(?:\s*\|\s*Cloudflare)?)\s*<\/title>/iu.test(response.body)) {
-      throw Object.assign(Error('Nude Moon browser verification is required.'),{code:'challenge_required',phase:'http'});
-    }
-    return ctx.html.extract(response.body,{...projection,baseUrl:response.url ?? url});
+    const body=requireHtmlBody(response,'Nude Moon');
+    return ctx.html.extract(body,{...projection,baseUrl:response.url ?? url});
   }
-  const details = recent(id => html(`${base}/${requireId(id)}-manga.html`,detailsProjection));
+  const details = recent(async id => {
+    const data=await html(`${base}/${id}-manga.html`,detailsProjection);
+    return {data,info:parseDetails(data,id)};
+  });
   return {
     async getFilters({refresh = false} = {}) {
       if (cachedTags == null || refresh) cachedTags = parseTagOptions(await html(`${base}/all_manga`,tagsProjection));
@@ -140,11 +146,13 @@ export default function createNudeMoon(ctx) {
     async getPopular(query = {}) { return parseListing(await html(catalogUrl(query,'views'),listingProjection)); },
     async getLatest(query = {}) { return parseListing(await html(catalogUrl(query,'date'),listingProjection)); },
     async search(query = {}) { return parseListing(await html(catalogUrl(query),listingProjection)); },
-    async getDetails({mangaId:id}) { return parseDetails(await details(id),id); },
+    async getDetails({mangaId:id}) { return (await details(requireId(id))).info; },
     async getChapters({mangaId:id}) {
-      const data = await details(id), manga = parseDetails(data,id);
-      if (normalizeId(data.reader) !== manga.id) throw parseError('Nude Moon reader link is missing.');
-      return [chapter({id:manga.id,title:manga.title,number:1,uploadedAt:uploadDate(data.metadata.map(normalizeText).join(' '))})];
+      const {data,info:manga} = await details(requireId(id));
+      // In mobile mode the title URL is already the complete reader and has no
+      // separate online link. A login placeholder also identifies that reader.
+      if (normalizeId(data.reader) !== manga.id && !(data.reader == null && (data.images.length || string(data.loginRequired)))) throw parseError('Nude Moon reader link is missing.');
+      return [chapter({id:manga.id,title:manga.title,number:1,uploadedAt:uploadDate(normalizeText(data.info.metadata))})];
     },
     async getPages({chapterId:id}) {
       // The row view exposes every full-size image, including lazy pages and

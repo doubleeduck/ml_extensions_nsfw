@@ -1,5 +1,15 @@
 import {parseError} from './data.mjs';
 
+export function requireHtmlBody(response,source) {
+  if(typeof response?.body!=='string'||!response.body.trim())throw Object.assign(Error(`Empty ${source} response.`),{code:'invalid_response',phase:'http'});
+  // Cloudflare can serve a challenge with HTTP 200. Match its page title or
+  // response header, not incidental challenge-platform scripts on real pages.
+  if(response.headers?.['cf-mitigated']==='challenge'||/<title[^>]*>\s*(?:(?:Just a moment|Один момент)[.!…\s]*|Attention Required!?(?:\s*\|\s*Cloudflare)?)\s*<\/title>/iu.test(response.body)) {
+    throw Object.assign(Error(`${source} browser verification is required.`),{code:'challenge_required',phase:'http'});
+  }
+  return response.body;
+}
+
 export function urlWithQuery(path, base, query = {}) {
   const url = new URL(path, base);
   for (const [key, raw] of Object.entries(query)) {

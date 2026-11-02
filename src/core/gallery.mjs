@@ -1,5 +1,5 @@
 import {chapter,filter,manga,normalizeText,parseError,record,string} from './data.mjs';
-import {requireArray} from './http.mjs';
+import {requireArray,requireHtmlBody} from './http.mjs';
 import {recent} from './recent.mjs';
 
 export const languages=[['english','Английский'],['japanese','Японский'],['chinese','Китайский'],['russian','Русский'],['korean','Корейский'],['spanish','Испанский'],['french','Французский'],['italian','Итальянский'],['german','Немецкий'],['portuguese','Португальский'],['polish','Польский'],['thai','Тайский'],['vietnamese','Вьетнамский'],['indonesian','Индонезийский']];
@@ -34,9 +34,8 @@ export default function createGallery(ctx,adapter) {
   const base=new URL(ctx.baseUrl).origin,id=value=>numericId(value,adapter.prefix);
   async function html(url,projection) {
     const response=await ctx.http.request({method:'GET',url,responseType:'text',userAgentProfile:'browser',headers:{Accept:'text/html,application/xhtml+xml',Referer:`${base}/`}});
-    if(typeof response.body!=='string'||!response.body.trim())throw parseError('Empty gallery response.');
-    if(/cf-chl-|<title>\s*Just a moment/iu.test(response.body))throw Object.assign(Error('Gallery browser verification is required.'),{code:'challenge_required',phase:'http'});
-    return ctx.html.extract(response.body,{...projection,baseUrl:response.url??url});
+    const body=requireHtmlBody(response,'Gallery');
+    return ctx.html.extract(body,{...projection,baseUrl:response.url??url});
   }
   const title=recent(async key=>adapter.details(await html(new URL(adapter.path?.(key)??`/${adapter.prefix}/${key}/`,base).href,adapter.detailsProjection),key,base));
   async function catalog(query,mode) {
@@ -45,7 +44,7 @@ export default function createGallery(ctx,adapter) {
     catch(error){if(Number(query.page)>1&&error.code==='not_found')return [];throw error;}
   }
   return {
-    async getFilters(){return adapter.filters();},
+    async getFilters(query={}){return adapter.filters(query,html);},
     async getPopular(query={}){return catalog(query,'popular');},
     async getLatest(query={}){return catalog(query,'latest');},
     async search(query={}){return catalog(query,'search');},

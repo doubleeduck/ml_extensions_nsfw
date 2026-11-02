@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import createNudeMoon,{buildFilters,catalogUrl,encodeSearchTerm,normalizeId,parseListing,parseDetails,parsePages,parseTagOptions} from '../src/sources/nudemoon.mjs';
 import {sourceDefinitions} from '../src/definitions.mjs';
 
-const details = {title:'Демо / Demo',cover:'/images/thumb/2610/208.jpg',description:'Описание\n манги',authors:['Автор','Автор'],
-  tags:['Тег','Тег'],metadata:['Дата: 19 Октября 2026 Страниц: 27'],reader:'/34344-online-original-slug.html'};
+const details = {title:'Демо / Demo',cover:'/images/thumb/2610/208.jpg',info:{description:'Описание\n манги',authors:['Автор','Автор'],
+  tags:['Тег','Тег'],metadata:'Дата: 19 Октября 2026 Страниц: 27'},images:[],reader:'/34344-online-original-slug.html'};
 const card = {link:{href:'/34344-catalog-slug.html',title:'Демо / Demo'},title:'',image:{src:'/images/thumb/2610/208.jpg'}};
 const listing = {title:'Манга на русском! Nude-Moon!',items:[card]};
 
@@ -109,6 +109,37 @@ test('Nude Moon details preserve Cyrillic, authors, page count and null defaults
   assert.throws(() => parseDetails({...details,title:''},'34344'),{code:'parse_error'});
 });
 
+test('Nude Moon mobile title metadata and inline reader do not require a desktop table or online link', async () => {
+  const mobile={...details,reader:null,info:{...details.info,metadata:'Автор: Автор Перевод: Demo 19 Октября 2026 10 тыс.'},
+    images:[{src:'/manga/2026/10/demo/001.jpg'},{lazy:'/manga/2026/10/demo/002.jpg'},{src:'/manga/2026/10/demo/001.jpg'}]};
+  const {ctx,requests,projections}=context({extract:()=>mobile}),source=createNudeMoon(ctx);
+  const [info,chapters]=await Promise.all([source.getDetails({mangaId:'34344'}),source.getChapters({mangaId:'34344'})]);
+  assert.equal(info.author,'Автор');assert.equal(info.description,'Описание манги');assert.deepEqual(info.tags,['Тег']);assert.equal(info.pageCount,2);
+  assert.equal(chapters[0].uploadedAt,'2026-10-19T00:00:00.000Z');assert.equal(chapters[0].id,'34344');assert.equal(requests.length,1);
+  assert.equal(projections[0].fields.info.selector,'.tag-links');assert.equal(projections[0].fields.info.ascend,4);
+  assert.deepEqual((await source.getPages({chapterId:'34344'})).map(page=>page.imageUrl),[
+    'https://nude-moon.org/manga/2026/10/demo/001.jpg','https://nude-moon.org/manga/2026/10/demo/002.jpg']);
+  assert.equal(requests.length,2);
+});
+
+test('Nude Moon mobile login placeholder leaves its title and chapter accessible', async () => {
+  const mobile={...details,reader:null,loginRequired:'/images/login_err.png',images:[]};
+  const {ctx}=context({extract:()=>mobile}),source=createNudeMoon(ctx);
+  assert.equal((await source.getDetails({mangaId:'34344'})).title,details.title);
+  assert.equal((await source.getChapters({mangaId:'34344'})).length,1);
+  await assert.rejects(source.getPages({chapterId:'34344'}),{code:'auth_required'});
+});
+
+test('Nude Moon never caches incomplete title metadata as a successful detail response',async()=>{
+  let reply={...details,info:null};
+  const {ctx,requests}=context({extract:()=>reply}),source=createNudeMoon(ctx);
+  await assert.rejects(source.getDetails({mangaId:'34344'}),{code:'parse_error'});
+  reply=details;
+  assert.equal((await source.getDetails({mangaId:'34344'})).author,'Автор');
+  await source.getChapters({mangaId:'/34344-another-slug.html'});
+  assert.equal(requests.length,2);
+});
+
 test('Nude Moon row reader retains lazy images, order and non-numeric filenames, excluding placeholders', () => {
   const pages = parsePages({title:'Demo',images:[{src:'/manga/2026/001.jpg'},
     {src:'data:image/gif;base64,placeholder',lazy:'/manga/2026/002.jpg'},
@@ -128,7 +159,7 @@ function context({reply,extract} = {}) {
 }
 
 test('Nude Moon dispatches catalog/details/chapter/row-reader requests using host text decoding and ISO dates', async () => {
-  const {ctx,requests,projections} = context({extract:projection => projection.fields.items ? listing : projection.fields.images ? {title:'Demo',images:[{lazy:'/manga/1.jpg'}]} : details});
+  const {ctx,requests,projections} = context({extract:projection => projection.fields.items ? listing : projection.fields.info ? details : {title:'Demo',images:[{lazy:'/manga/1.jpg'}]}});
   const source = createNudeMoon(ctx);
   await source.getPopular({page:2}); await source.getLatest(); await source.search({searchTerm:'a&b'});
   assert.equal((await source.getDetails({mangaId:'34344'})).id,'34344');
