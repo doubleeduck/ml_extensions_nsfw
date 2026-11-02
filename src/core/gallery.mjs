@@ -40,7 +40,7 @@ export default function createGallery(ctx,adapter) {
   const title=recent(async key=>adapter.details(await html(new URL(adapter.path?.(key)??`/${adapter.prefix}/${key}/`,base).href,adapter.detailsProjection),key,base));
   async function catalog(query,mode) {
     const target=adapter.url(base,query,mode);if(!target)return [];
-    try{const rows=await html(target,{...adapter.listingProjection,selector:adapter.selector(mode,query)});return listing(adapter.items?adapter.items(rows,mode,query):rows,base,adapter.prefix);}
+    try{const rows=await html(target,{...adapter.listingProjection,...(adapter.selector?{selector:adapter.selector(mode,query)}:{})});return listing(adapter.items?adapter.items(rows,mode,query):rows,base,adapter.prefix);}
     catch(error){if(Number(query.page)>1&&error.code==='not_found')return [];throw error;}
   }
   return {

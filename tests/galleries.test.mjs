@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import createThree,{catalogUrl as threeUrl,pages as threePages,selectListing} from '../src/sources/threehentai.mjs';
-import createNh,{catalogUrl as nhUrl,details as nhDetails,pages as nhPages,galleryData,buildFilters as nhFilters,parseLanguageOptions} from '../src/sources/nhentaito.mjs';
+import createNh,{catalogUrl as nhUrl,details as nhDetails,pages as nhPages,galleryData,buildFilters as nhFilters,parseLanguageOptions,catalogItems,listingProjection as nhListingProjection} from '../src/sources/nhentaito.mjs';
 import {classFlagData,tagFlagData,languageFlagData} from '../src/core/gallery_flags.mjs';
 import {sourceDefinitions} from '../src/definitions.mjs';
 import {galleryFilters,listing,numericId} from '../src/core/gallery.mjs';
@@ -17,7 +17,7 @@ function fixture(kind,{fail=false}={}) {
  const calls=[],queries=[];let failed=false;
  const create=kind==='three'?createThree:createNh,baseUrl=kind==='three'?threeBase:nhBase;
  const source=create({baseUrl,http:{request:async input=>{calls.push(input);if(fail&&!failed){failed=true;throw Object.assign(Error('offline'),{code:'offline'});}return {body:input.url.includes('/7/1')?'reader':input.url.includes('/7')?'title':'catalog',url:input.url};}},html:{extract:async(body,query)=>{
-  queries.push(query);return body==='reader'?[readerScript(threeReader)]:body==='title'?kind==='three'?threeTitle:nhTitle:[{...row,href:kind==='three'?'/d/7':'/g/7/'}];
+  queries.push(query);return body==='reader'?[readerScript(threeReader)]:body==='title'?kind==='three'?threeTitle:nhTitle:kind==='three'?[{...row,href:'/d/7'}]:{items:[row],cached:[]};
  }}});return {source,calls,queries};
 }
 
@@ -124,6 +124,11 @@ test('nhentai.to data parser tolerates the site trailing comma but never execute
 });
 test('nhentai.to pages use descriptor order instead of shifted PHP array keys and never use thumbnails',()=>{
  const data=nhDetails(nhTitle,'7',nhBase);assert.equal(data.info.pageCount,2);assert.equal(data.info.artist,'Writer');assert.deepEqual(data.info.tags,['Full color']);assert.deepEqual(data.related.map(i=>i.id),['8']);
+ assert.equal(data.info.author,null);
+ const groupTitle={...nhTitle,scripts:[nhScript({...gallery,tags:[...gallery.tags,{type:'group',name:'Circle'}]})]};
+ assert.equal(nhDetails(groupTitle,'7',nhBase).info.author,'Circle');
+ assert.equal(nhDetails(groupTitle,'7',nhBase).info.artist,'Writer');
+ assert.deepEqual(sourceDefinitions().find(d=>d.id==='all.nsfw.nhentaito').filterBindings,{tags:'tags',author:'groups',artist:'artists'});
  assert.equal(data.info.coverUrl,'https://t.nhentai.net/galleries/99/cover.jpg');
  assert.equal(data.related[0].coverUrl,'https://t.nhentai.net/galleries/99/thumb.jpg');
  assert.deepEqual(nhPages(data).map(p=>p.imageUrl),['https://i.nhentai.net/galleries/99/1.jpg','https://i.nhentai.net/galleries/99/2.webp']);
@@ -184,11 +189,55 @@ test('nhentai validates cached response status, gallery identity and complete fu
  const malformed=cachedTitle();malformed.cached[0].data='not JSON';assert.throws(()=>nhDetails(malformed,'7','https://nhentai.net'),{code:'parse_error'});
 });
 
-test('nhentai catalog keeps current language classes and does not use the home popularity teaser',async()=>{
- const queries=[],source=createNh({baseUrl:'https://nhentai.net',http:{request:async input=>({body:'HTML',url:input.url})},html:{extract:async(_,projection)=>(queries.push(projection),[{...row,class:'gallery lang-jp',languageTags:null,image:{src:'https://t2.nhentai.net/galleries/99/thumb.webp'}}])}});
+const cachedListing=(result,path='/api/v2/search?query=tag%3Afull-color&sort=date&page=1')=>({url:path,data:JSON.stringify({status:200,body:JSON.stringify({result,num_pages:2})})});
+const catalogRow=(id,extra={})=>({id,english_title:`Title ${id}`,thumbnail:`galleries/${id}/thumb.webp`,tag_ids:[],...extra});
+
+test('nhentai catalog keeps current language classes and excludes the home popularity teaser',async()=>{
+ const queries=[],source=createNh({baseUrl:'https://nhentai.net',http:{request:async input=>({body:'HTML',url:input.url})},html:{extract:async(_,projection)=>(queries.push(projection),{items:[{...row,class:'gallery lang-jp',languageTags:null,image:{src:'https://t2.nhentai.net/galleries/99/thumb.webp'}}],
+   cached:[cachedListing([catalogRow(99)],'/api/v2/galleries/popular?period=day'),cachedListing([catalogRow(7)],'/api/v2/galleries?page=1')]})}});
  const rows=await source.getLatest();assert.equal(rows[0].languageFlagData,languageFlagData('japanese'));
  assert.equal(rows[0].coverUrl,'https://t2.nhentai.net/galleries/99/thumb.webp');
- assert.ok(queries[0].selector.includes(':not(.index-popular)'));
+ assert.deepEqual(rows.map(row=>row.id),['7']);assert.equal(queries[0].selector,undefined);
+ assert.deepEqual(queries[0].fields,nhListingProjection.fields);
+ assert.ok(queries[0].fields.items.selector.includes('.gallery-grid .gallery'));
+});
+
+test('nhentai all sorts and taxonomy combinations parse the paginated server result in its order',async()=>{
+ for(const selectedFilters of [{tags:['full color']},{artists:['An Artist']},{groups:['A Group']},{parodies:['A Series']},{characters:['A Character']},
+   {language:['russian'],tags:['full color, -other'],artists:['An Artist'],sort:['popular-month']},
+   ...['popular','popular-today','popular-week','popular-month','latest'].map(sort=>({sort:[sort]}))]) {
+   const calls=[],queries=[];
+   const source=createNh({baseUrl:'https://nhentai.net',http:{request:async input=>(calls.push(input),{body:'HTML',url:input.url})},html:{extract:async(_,projection)=>(queries.push(projection),{
+     items:[{...row,href:'/g/1/',image:{src:'https://t3.nhentai.net/galleries/1/thumb.webp'},class:'gallery lang-gb'}],
+     cached:[cachedListing([catalogRow(100)],'/api/v2/galleries/popular'),cachedListing([catalogRow(3),catalogRow(1)])],
+   })}});
+   const result=await source.search({page:2,selectedFilters});
+   assert.deepEqual(result.map(row=>row.id),['3','1']);assert.equal(calls.length,1);assert.equal(queries.length,1);
+   assert.equal(result[0].coverUrl,'https://t.nhentai.net/galleries/3/thumb.webp');
+   assert.equal(result[1].coverUrl,'https://t3.nhentai.net/galleries/1/thumb.webp');
+   assert.equal(result[1].languageFlagData,languageFlagData('english'));
+   assert.equal(new URL(calls[0].url).searchParams.get('page'),'2');
+ }
+});
+
+test('nhentai paginated result validates structure and distinguishes no matches from corrupt data',()=>{
+ assert.deepEqual(catalogItems({items:[row],cached:[cachedListing([])]},nhBase),[]);
+ assert.deepEqual(catalogItems({items:[],cached:[cachedListing([catalogRow(1,{blacklisted:true})])]},nhBase),[]);
+ assert.equal(catalogItems({items:[row],cached:[]},nhBase)[0].image,'https://t.nhentai.net/galleries/99/thumb.jpg');
+ for(const cached of [{...cachedListing([]),data:'bad JSON'},cachedListing(null),cachedListing([catalogRow(0)]),cachedListing([catalogRow(1,{english_title:null})]),cachedListing([catalogRow(1,{thumbnail:null})])]) {
+   assert.throws(()=>catalogItems({items:[],cached:[cached]},nhBase),{code:'parse_error'});
+ }
+ const unrelated=cachedListing([catalogRow(2)],'https://other.example/api/v2/search');
+ assert.deepEqual(catalogItems({items:[],cached:[unrelated]},nhBase),[]);
+});
+
+test('nhentai language metadata resolves API-only flags without extra catalog requests or legacy tag IDs',async()=>{
+ const calls=[],source=createNh({baseUrl:'https://nhentai.net',http:{request:async input=>(calls.push(input),{body:input.url.includes('/languages')?'languages':'catalog',url:input.url})},html:{extract:async body=>body==='languages'
+   ?languageResponse([{...language('russian'),id:123456}])
+   :{items:[],cached:[cachedListing([catalogRow(7,{tag_ids:[123456]}),catalogRow(8,{tag_ids:[19]})])]}}});
+ await source.getFilters();
+ const result=await source.search({selectedFilters:{language:['russian'],tags:['full color']}});
+ assert.equal(calls.length,2);assert.equal(result[0].languageFlagData,languageFlagData('russian'));assert.equal(result[1].languageFlagData,null);
 });
 
 test('gallery Cloudflare challenges are actionable errors and real challenge scripts are not false positives',async()=>{
@@ -196,7 +245,7 @@ test('gallery Cloudflare challenges are actionable errors and real challenge scr
   const source=createNh({baseUrl:'https://nhentai.net',http:{request:async()=>reply},html:{extract:async()=>assert.fail('Must not parse a verification page')}});
   await assert.rejects(source.getLatest(),{code:'challenge_required'});
  }
- const source=createNh({baseUrl:'https://nhentai.net',http:{request:async()=>({body:'<title>nhentai</title><script>let flag="cf-chl-example";</script>'})},html:{extract:async()=>[]}});
+ const source=createNh({baseUrl:'https://nhentai.net',http:{request:async()=>({body:'<title>nhentai</title><script>let flag="cf-chl-example";</script>'})},html:{extract:async()=>({items:[],cached:[]})}});
  assert.deepEqual(await source.getLatest(),[]);
 });
 for(const kind of ['three','nh'])test(`${kind}: details, chapters and recommendations share one title read; failures are retryable`,async()=>{
@@ -205,7 +254,7 @@ for(const kind of ['three','nh'])test(`${kind}: details, chapters and recommenda
  await assert.rejects(source.getPages({mangaId:'7',chapterId:'8'}),e=>e.code==='parse_error');
 });
 test('both sources use the chosen mirror for catalog, details and request referer',async()=>{
- for(const create of [createThree,createNh]){const calls=[],source=create({baseUrl:'https://mirror.example',http:{request:async r=>(calls.push(r),{body:'catalog',url:r.url})},html:{extract:async()=>[]}});await source.getLatest({page:2});assert.equal(new URL(calls[0].url).origin,'https://mirror.example');assert.equal(calls[0].headers.Referer,'https://mirror.example/');}
+ for(const create of [createThree,createNh]){const calls=[],source=create({baseUrl:'https://mirror.example',http:{request:async r=>(calls.push(r),{body:'catalog',url:r.url})},html:{extract:async()=>create===createThree?[]:{items:[],cached:[]}}});await source.getLatest({page:2});assert.equal(new URL(calls[0].url).origin,'https://mirror.example');assert.equal(calls[0].headers.Referer,'https://mirror.example/');}
 });
 test('browser verification and unrelated HTTP failures never become empty catalog success',async()=>{
  for(const create of [createThree,createNh]){

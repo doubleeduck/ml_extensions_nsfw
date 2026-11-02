@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import createNudeMoon,{buildFilters,catalogUrl,encodeSearchTerm,normalizeId,parseListing,parseDetails,parsePages,parseTagOptions} from '../src/sources/nudemoon.mjs';
+import createNudeMoon,{buildFilters,catalogUrl,encodeSearchTerm,normalizeId,parseListing,parseDetails,parsePages} from '../src/sources/nudemoon.mjs';
 import {sourceDefinitions} from '../src/definitions.mjs';
 
 const details = {title:'Демо / Demo',cover:'/images/thumb/2610/208.jpg',info:{description:'Описание\n манги',authors:['Автор','Автор'],
@@ -20,7 +20,8 @@ test('Nude Moon registration declares adult Russian reading, scoped auth/media a
   assert.equal(source.auth.loginUrl,'https://nude-moon.org/');
   assert.equal(source.web.mangaUrlTemplate,'/{id}-manga.html');
   assert.deepEqual(source.capabilities,['browse','latest','search','filters','account']);
-  assert.equal(source.supportsFilterRefresh,true); assert.deepEqual(source.filterBindings,{tags:'tags'});
+  assert.equal(source.supportsFilterRefresh,false); assert.deepEqual(source.filterBindings,{tags:'tags'});
+  assert.deepEqual(source.auth.rules,{cookieAll:['fusion_user']});
 });
 
 test('Nude Moon IDs survive different slugs, reader URLs, mirror hosts and query strings', () => {
@@ -51,20 +52,17 @@ test('Nude Moon search matches Windows-1251 browser form encoding for every defi
   assert.equal(encodeSearchTerm('Ё ё &+😀'),'%A8+%B8+%26%2B%26%23128512%3B');
 });
 
-const tagRows = {tags:[{href:'/tags/романтика+',label:' романтика '},
-  {href:'/tags/%D0%B1%D0%B5%D0%B7_%D1%86%D0%B5%D0%BD%D0%B7%D1%83%D1%80%D1%8B+',label:'без цензуры'},
-  {href:'/tags/x-ray+',label:'x-ray'}]};
-
-test('Nude Moon tag options use sidebar tokens, readable labels, deduplication and a multi-select filter', () => {
-  const options = parseTagOptions({tags:[...tagRows.tags,tagRows.tags[0],
-    {href:'https://example.org/tags/other+',label:'Foreign'}, {href:'/tags/bad%26views+',label:'Bad'},
-    {href:'/tags/tag+&date',label:'Sort link'}, {href:'/tag/detail',label:'Detail tag'},
-    {href:'/tags/empty+',label:' '}, {href:'/tags/%ZZ+',label:'Broken encoding'}]});
-  assert.deepEqual(options,[['романтика','романтика'],['без_цензуры','без цензуры'],['x-ray','x-ray']]);
-  const tags = buildFilters(options).find(filter => filter.key === 'tags');
+test('Nude Moon has the full authenticated desktop taxonomy with stable path tokens and multiple selection', () => {
+  const tags = buildFilters().find(filter => filter.key === 'tags');
   assert.equal(tags.kind,'multiSelect'); assert.deepEqual(tags.defaultValues,[]);
-  assert.deepEqual(tags.options.map(option => [option.value,option.label]),options);
-  for (const input of [{},{tags:[]},{tags:[{href:'/tag/not-a-filter',label:'Tag'}]}]) assert.throws(() => parseTagOptions(input),{code:'parse_error'});
+  assert.equal(tags.options.length,103);
+  assert.equal(new Set(tags.options.map(option=>option.value)).size,103);
+  for(const option of tags.options) {
+    assert.match(option.value,/^[\p{L}\p{N}_-]+$/u);
+    assert.ok(option.label.trim());
+  }
+  assert.equal(tags.options.find(option=>option.value==='без_цензуры').label,'без цензуры');
+  assert.equal(tags.options.find(option=>option.value==='x-ray').label,'x-ray');
 });
 
 test('Nude Moon combines all selected tags with sorting and paging in the site path syntax', () => {
@@ -78,21 +76,13 @@ test('Nude Moon combines all selected tags with sorting and paging in the site p
   for (const tags of [['a&views'],['a+b'],['../bad'],[''],[null],'not-an-array']) assert.throws(() => catalogUrl({selectedFilters:{tags}}),{code:'parse_error'});
 });
 
-test('Nude Moon loads current tag options per instance, caches them and explicitly refreshes without caching failures', async () => {
-  let reply = tagRows;
-  const {ctx,requests,projections} = context({extract:() => reply}), source = createNudeMoon(ctx);
-  assert.equal((await source.getFilters())[1].options.length,3);
-  await source.getFilters(); assert.equal(requests.length,1);
-  await createNudeMoon(ctx).getFilters(); assert.equal(requests.length,2);
-  reply = {tags:[{href:'/tags/new_tag+',label:'Новый тег'}]};
-  assert.equal((await source.getFilters({refresh:true}))[1].options[0].value,'new_tag');
-  assert.equal(requests.length,3); assert.ok(requests.every(input => input.url === 'https://nude-moon.org/all_manga'));
-  assert.equal(projections[0].fields.tags.selector,'a[title^="Поиск по жанру"][href^="/tags/"]');
-  reply = {tags:[]}; await assert.rejects(source.getFilters({refresh:true}),{code:'parse_error'});
-  assert.equal((await source.getFilters())[1].options[0].value,'new_tag');
-  const failed = createNudeMoon(ctx);
-  await assert.rejects(failed.getFilters(),{code:'parse_error'});
-  reply = tagRows; assert.equal((await failed.getFilters())[1].options.length,3);
+test('Nude Moon filters work offline and neither mobile markup nor caller mutations affect them', async () => {
+  const {ctx,requests}=context({reply:()=>assert.fail('Filters must not request HTML')}),source=createNudeMoon(ctx);
+  const first=await source.getFilters();
+  const expected=structuredClone(first);
+  first[1].options[0].label='Changed'; first[1].options.pop();
+  for(const read of [()=>source.getFilters(),()=>source.getFilters({refresh:true}),()=>createNudeMoon(ctx).getFilters()])assert.deepEqual(await read(),expected);
+  assert.equal(requests.length,0);
 });
 
 test('Nude Moon valid empty paging differs from incomplete HTTP-200 search responses', () => {
@@ -176,10 +166,12 @@ test('Nude Moon dispatches catalog/details/chapter/row-reader requests using hos
   assert.equal(requests.filter(request => request.url.endsWith('/34344-manga.html')).length,1);
 });
 
-test('Nude Moon invalid IDs and absent reader links fail; HTTP/auth/challenge errors retain their codes', async () => {
+test('Nude Moon invalid IDs fail before HTTP; valid titles need no reader links or previews for their chapter', async () => {
   const {ctx,requests} = context({extract:() => ({...details,reader:'/9-online-other.html'})}), source = createNudeMoon(ctx);
   await assert.rejects(source.getDetails({mangaId:'bad'}),{code:'parse_error'}); assert.equal(requests.length,0);
-  await assert.rejects(source.getChapters({mangaId:'34344'}),{code:'parse_error'});
+  const chapters=await source.getChapters({mangaId:'34344'});
+  assert.equal(chapters.length,1);assert.equal(chapters[0].id,'34344');assert.equal(requests.length,1);
+  assert.equal((await source.getDetails({mangaId:'34344'})).title,details.title);assert.equal(requests.length,1);
   for (const code of ['auth_required','challenge_required','rate_limited','network']) {
     const {ctx} = context({reply:() => {throw Object.assign(Error('Host failure'),{code});}});
     await assert.rejects(createNudeMoon(ctx).getLatest(),{code});
@@ -187,13 +179,13 @@ test('Nude Moon invalid IDs and absent reader links fail; HTTP/auth/challenge er
   const empty = context({reply:() => ({body:''})}); await assert.rejects(createNudeMoon(empty.ctx).getLatest(),{code:'invalid_response'});
 });
 
-test('Nude Moon HTTP-200 Cloudflare challenges never enter parsing or become cached tags',async()=>{
+test('Nude Moon HTTP-200 Cloudflare challenges never enter parsing or become cached titles',async()=>{
  let calls=0;
- const {ctx,projections}=context({reply:()=>({body:++calls===1?'<html><title>Один момент…</title></html>':'ok'}),extract:()=>({tags:[{href:'/tags/demo+',label:'Demo'}]})});
+ const {ctx,projections}=context({reply:()=>({body:++calls===1?'<html><title>Один момент…</title></html>':'ok'}),extract:()=>details});
  const source=createNudeMoon(ctx);
- await assert.rejects(source.getFilters(),error=>error.code==='challenge_required'&&error.phase==='http');
+ await assert.rejects(source.getDetails({mangaId:'34344'}),error=>error.code==='challenge_required'&&error.phase==='http');
  assert.equal(projections.length,0);
- assert.ok((await source.getFilters()).find(filter=>filter.key==='tags').options.length);
+ assert.equal((await source.getDetails({mangaId:'34344'})).id,'34344');
  assert.equal(calls,2);
  for(const body of ['<title>Just a moment...</title>','<title>Attention Required! | Cloudflare</title>']){
   const fixture=context({reply:()=>({body}),extract:()=>{throw Error('Must not parse a challenge');}});

@@ -1,4 +1,4 @@
-import createGallery,{fields,galleryFilters,imageUrl,languages,listing,picture,scripts} from '../core/gallery.mjs';
+import createGallery,{fields,galleryFilters,imageUrl,languages,listing,numericId,picture,scripts} from '../core/gallery.mjs';
 import {filter,manga,normalizeText,parseError,record,string} from '../core/data.mjs';
 import {requireArray,requireRecord,urlWithQuery} from '../core/http.mjs';
 import {classFlagData,tagFlagData,languageFlagData} from '../core/gallery_flags.mjs';
@@ -60,6 +60,8 @@ const withFlags=(rows,base)=>requireArray(rows,'nhentai.to cards').map(row=>({..
 export const detailsProjection={fields:{cover:{selector:'#cover img',fields:picture.fields},scripts,
   cached:{selector:'script[data-sveltekit-fetched][data-url*="/api/v2/galleries/"]',all:true,fields:{url:{attr:'data-url'},data:{text:true,normalizeWhitespace:false}}},
   related:{selector:'.gallery',all:true,fields:tile}}};
+export const listingProjection={fields:{items:{selector:'.gallery-grid .gallery, .index-container:not(.index-popular) .gallery, .index-latest .gallery',all:true,fields:tile},
+  cached:{selector:'script[data-sveltekit-fetched][data-url*="/api/v2/search"], script[data-sveltekit-fetched][data-url*="/api/v2/galleries"]',all:true,fields:{url:{attr:'data-url'},data:{text:true,normalizeWhitespace:false}}}}};
 function cachedResponse(rows,path,base) {
   for(const row of requireArray(rows??[],'nhentai cached responses')) {
     let url;try{url=new URL(row.url,base)}catch{continue}
@@ -70,19 +72,36 @@ function cachedResponse(rows,path,base) {
   }
   return null;
 }
+export function catalogItems(input,base,tagLanguages=new Map()) {
+  const data=requireRecord(input,'nhentai catalog'),rows=withFlags(data.items,base),byId=new Map();
+  for(const row of rows) {try{byId.set(numericId(row.href,'g'),row)}catch{/* Ignore ad links. */}}
+  const cached=cachedResponse(data.cached,'/api/v2/search',base)??cachedResponse(data.cached,'/api/v2/galleries',base);
+  if(!cached)return rows;
+  // The server's paginated result is independent of the homepage teaser and
+  // the different HTML grid used by search/sort pages. Preserve its order.
+  return requireArray(cached.result,'nhentai catalog results').filter(row=>!row?.blacklisted).map(value=>{
+    const row=requireRecord(value,'nhentai catalog item'),id=numericId(row.id,'g'),dom=byId.get(id);
+    const title=string(row.english_title)??string(row.japanese_title)??string(dom?.title);
+    const image=dom?.image??mediaUrl(row.thumbnail,'https://t.nhentai.net/');
+    if(!title||!image)throw parseError('Incomplete nhentai catalog item.');
+    const flag=dom?.languageFlagData??(Array.isArray(row.tag_ids)?row.tag_ids.map(id=>languageFlagData(tagLanguages.get(Number(id)))).find(Boolean):null);
+    return {href:`/g/${id}/`,title,image,languageFlagData:flag??null};
+  });
+}
 const languagesProjection={fields:{cached:{selector:'script[data-sveltekit-fetched][data-url*="/api/v2/tags/language"]',all:true,fields:{url:{attr:'data-url'},data:{text:true,normalizeWhitespace:false}}}}};
 const languageLabels=new Map([...languages,['ukrainian','Украинский'],['hebrew','Иврит'],['arabic','Арабский'],['khmer','Кхмерский'],['romanian','Румынский'],['greek','Греческий'],['turkish','Турецкий'],['czech','Чешский'],['translated','Переведено'],['textless','Без текста'],['textless-narrative','Без текста в сюжете']]);
 export function parseLanguageOptions(input,base) {
   const data=requireRecord(cachedResponse(requireRecord(input,'nhentai languages').cached,'/api/v2/tags/language',base),'nhentai language response');
-  const seen=new Set(),options=[];
+  const seen=new Set(),options=[],tagLanguages=[];
   for(const row of requireArray(data.result,'nhentai languages')) {
     const tag=requireRecord(row,'nhentai language'),slug=string(tag.slug),name=normalizeText(tag.name);
     if(tag.type!=='language'||!slug||!/^[a-z][a-z-]{0,127}$/u.test(slug)||!name||!(Number(tag.count)>0)||seen.has(slug))continue;
     seen.add(slug);options.push([slug,languageLabels.get(slug)??name]);
+    if(Number.isSafeInteger(tag.id)&&tag.id>0)tagLanguages.push([tag.id,slug]);
   }
   const totalPages=Number(data.num_pages);
   if(!options.length||!Number.isInteger(totalPages)||totalPages<1||totalPages>8)throw parseError('Invalid nhentai language catalog.');
-  return {options,totalPages};
+  return {options,totalPages,tagLanguages};
 }
 // Parse only the data literal. Never execute the remote N.gallery constructor.
 export function galleryData(input) {
@@ -106,7 +125,7 @@ export function details(input,id,base) {
   const tags=requireArray(gallery.tags,'nhentai.to tags'),values=type=>tags.filter(tag=>tag.type===type).map(tag=>normalizeText(tag.name)).filter(Boolean),count=Number(gallery.num_pages);
   if(!Number.isInteger(count)||count<1)throw parseError('Invalid nhentai.to page count.');
   const coverUrl=mediaUrl(data.cover,base);if(!coverUrl)throw parseError('nhentai.to cover is missing.');
-  return {gallery,info:manga({id,title,secondaryTitle:string(names.japanese),coverUrl,languageFlagData:values('language').map(languageFlagData).find(Boolean)??null,pageCount:count,artist:values('artist').join(', ')||null,author:values('group').join(', ')||values('artist').join(', ')||null,
+  return {gallery,info:manga({id,title,secondaryTitle:string(names.japanese),coverUrl,languageFlagData:values('language').map(languageFlagData).find(Boolean)??null,pageCount:count,artist:values('artist').join(', ')||null,author:values('group').join(', ')||null,
     type:values('category')[0]??null,tags:values('tag'),ageRating:'18+',status:'completed',description:[values('language').join(', '),`Страниц: ${count}`].filter(Boolean).join('\n')}),related:listing(withFlags(data.related,base),base,'g').filter(row=>row.id!==id)};
 }
 export function pages(data) {
@@ -132,12 +151,15 @@ export function pages(data) {
 }
 export default ctx=>{
   const base=new URL(ctx.baseUrl).origin;
+  let tagLanguages=new Map();
   const loadLanguages=async html=>{
-    const first=parseLanguageOptions(await html(urlWithQuery('/languages',base,{sort:'popular'}),languagesProjection),base),options=new Map(first.options);
+    const first=parseLanguageOptions(await html(urlWithQuery('/languages',base,{sort:'popular'}),languagesProjection),base),options=new Map(first.options),ids=new Map(first.tagLanguages);
     for(let page=2;page<=first.totalPages;page++) {
       const next=parseLanguageOptions(await html(urlWithQuery('/languages',base,{sort:'popular',page}),languagesProjection),base);
       for(const [value,label] of next.options)options.set(value,label);
+      for(const [id,language] of next.tagLanguages)ids.set(id,language);
     }
+    tagLanguages=ids;
     return [...options];
   };
   const languageCache=()=>recent(loadLanguages,{ttlMs:30*60*1000,limit:1});
@@ -145,8 +167,5 @@ export default ctx=>{
   return createGallery(ctx,{prefix:'g',url:catalogUrl,filters:async({refresh=false}={},html)=>{
     if(refresh)cachedLanguages=languageCache();
     return buildFilters(await cachedLanguages(html));
-  },listingProjection:{all:true,fields:tile},items:rows=>withFlags(rows,ctx.baseUrl),
-    // Home's popular block contains just five cards. Browse only the full list;
-    // popularity is a paginated server search rather than that teaser block.
-    selector:()=>'.index-container:not(.index-popular) .gallery, .index-latest .gallery',detailsProjection,details,pages});
+  },listingProjection,items:input=>catalogItems(input,base,tagLanguages),detailsProjection,details,pages});
 };
