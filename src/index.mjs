@@ -7,8 +7,10 @@ import createIMHentai from './sources/imhentai.mjs';
 import createPururin from './sources/pururin.mjs';
 import createChan from './engines/chan.mjs';
 import createNudeMoon from './sources/nudemoon.mjs';
+import createAkuma from './sources/akuma.mjs';
 
 const factories = new Map([
+  ['all.nsfw.akuma',createAkuma],
   ['all.nsfw.threehentai',createThreeHentai],
   ['all.nsfw.nhentaito',createNhentaiTo],
   ['ru.nsfw.hentailib',createLibGroup],

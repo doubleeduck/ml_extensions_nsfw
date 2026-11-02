@@ -2,6 +2,7 @@
 const browse = ['browse','latest','search','filters'];
 const origin = host => `https://${host}`;
 const sourceBranding = {
+  "akuma": {"icon":"assets/source_logos/akuma.png","accentColor":"#2B2B2B"},
   "threehentai": {"icon":"assets/source_logos/threehentai.png","accentColor":"#F15A70"},
   "nhentaito": {"icon":"assets/source_logos/nhentaito.png","accentColor":"#ED2553"},
   "hentailib": {
@@ -90,6 +91,11 @@ const senkuro = () => {
     template:'/manga/{id}',idPart:{separator:',,',index:1}});
 };
 export const registrations = [
+  source('all.nsfw.akuma','Akuma','akuma.moe','sources/akuma.mjs',{nsfw:true,custom:true,template:'/g/{id}',
+    auth:{...cookieAuth('akuma.moe','/login'),rules:{cookieAny:['remember_web_*']},sessionExport:{headers:['Cookie'],values:[]}},
+    images:['https://akuma.moe'],bindings:{tags:'tags',artist:'artists',author:'groups'},network:{transportProfile:'host.platform.v1',userAgentProfile:'browser',maxConcurrentRequests:2,
+      // The two image hosts need the source's parent-domain DDoS-Guard cookie.
+      authOrigins:['https://akuma.moe','https://s1.akuma.moe','https://s2.akuma.moe']}}),
   source('all.nsfw.threehentai','3Hentai','3hentai.net','sources/threehentai.mjs',{nsfw:true,custom:true,recommendations:true,template:'/d/{id}',
     auth:{...cookieAuth('3hentai.net','/login'),cookieOrigins:['3hentai.net','ru.3hentai.net','es.3hentai.net','fr.3hentai.net','it.3hentai.net','pt.3hentai.net'].map(origin)},
     bindings:{tags:'tags',artist:'artists',author:'groups'},network:{transportProfile:'host.platform.v1'}}),
