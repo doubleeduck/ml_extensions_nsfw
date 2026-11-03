@@ -37,12 +37,9 @@ my-sources/
 
 | Репозиторий | Содержимое | Существующий extensionId | Архив по умолчанию | GitHub environment |
 | --- | --- | --- | --- | --- |
+| `official_ml_extensions` | Официальный пакет проекта | `official.mangalaunch.core.sources` | `official.mangalaunch.core.sources.mlsource` | `official-core-source-release` |
 | `ml_extensions` | Обычные источники | `official.mangalaunch.sources` | `official.mangalaunch.sources.mlsource` | `official-source-release` |
 | `nsfw_ml_extensions` | NSFW-источники | `official.mangalaunch.nsfw.sources` | `official.mangalaunch.nsfw.sources.mlsource` | `official-nsfw-source-release` |
-
-Название этих пакетов — **Unofficial Extensions**. Существующие технические ID и имена архивов сохраняются для обновлений. Для нового самостоятельного пакета выберите собственный уникальный `extensionId`, ключ издателя и source IDs; не используйте чужой namespace. NSFW-источники публикуйте в соответствующем отдельном пакете и отмечайте `isNsfw: true`.
-
-ID источников, тайтлов и глав должны быть стабильными: от них зависят библиотека, история и прогресс. Смена домена не означает смену ID. Не передавайте уже опубликованный sourceId другому пакету или издателю: удаление пакета пользователем не освобождает его зарегистрированное владение.
 
 ## 2. Manifest отдельного пакета
 
@@ -767,7 +764,6 @@ interface MangaDto {
   status: string | null; type: string | null; ageRating: string | null;
   rating: number | null; releaseYear: string | null;
   pageCount: number | null; languageFlagUrl: string | null; tags: string[];
-  languageFlagData?: string | null;
 }
 interface ChapterAccessDto {
   type: 'available' | 'temporarilyUnavailable' | 'paid';
@@ -788,7 +784,6 @@ interface RecommendationPageDto {
 | MangaDto.id, ChapterDto.id | Непустые стабильные строки. Это не обязательно число или URL; составные ID допустимы. Не меняйте формат при смене домена. |
 | title | Непустой отображаемый текст, без HTML; title отсутствующего тайтла не заменяется фиктивным названием. |
 | coverUrl, languageFlagUrl | Абсолютный HTTPS URL или null, с разрешённым image origin. Не используйте data:/blob: или относительный путь. |
-| languageFlagData | Необязательный PNG data URI (`data:image/png;base64,...`) для небольшого встроенного флага: до 4096 байт после декодирования, от 1×1 до 256×128 пикселей. Не используется для обложек и страниц. Новый хост рисует его из памяти без HTTP; старый хост игнорирует это дополнительное поле. Изображение должно быть статическим. |
 | description | Строка или null, до 256 Ки символов; не возвращайте весь документ сайта. |
 | secondaryTitle, author, artist, status, type, ageRating, releaseYear | Строки или null. Универсальных enum для status/type/ageRating нет. releaseYear — строка, не число. |
 | rating | Конечное число или null; wire не задаёт универсальную шкалу и не нормализует рейтинг автоматически. |

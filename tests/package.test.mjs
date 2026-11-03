@@ -14,6 +14,7 @@ test('unofficial package registers 13 NSFW IDs and its offline factories never p
   assert.deepEqual(registrations.map(source => source.id),["all.nsfw.akuma","all.nsfw.threehentai","all.nsfw.nhentaito","ru.nsfw.hentailib","ru.nsfw.yaoilib","ru.nsfw.allhentai","ru.nsfw.senkognito","all.nsfw.imhentai","en.nsfw.imhentai","ru.nsfw.imhentai","all.nsfw.pururin","ru.nsfw.hchan","ru.nsfw.nudemoon"]);
   assert.ok(registrations.every(source => source.isNsfw === true));
   assert.equal(manifestDefinition({version:'1.0.0',publisherKeyId:'fixture'}).extensionId,'official.mangalaunch.nsfw.sources');
+  assert.equal(manifestDefinition({version:'1.0.0',publisherKeyId:'fixture'}).name,'MangaLaunch Unofficial NSFW Extensions');
   const deny = () => { throw Error('Factory must not perform IO.'); };
   for (const definition of sourceDefinitions()) {
     assert.equal('_module' in definition,false);

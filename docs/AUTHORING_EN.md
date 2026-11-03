@@ -37,12 +37,9 @@ To add a source to an existing bundle, add its module under `src/sources/` or a 
 
 | Repository | Content | Existing extensionId | Default archive | GitHub environment |
 | --- | --- | --- | --- | --- |
+| `official_ml_extensions` | Official project package | `official.mangalaunch.core.sources` | `official.mangalaunch.core.sources.mlsource` | `official-core-source-release` |
 | `ml_extensions` | Non-NSFW sources | `official.mangalaunch.sources` | `official.mangalaunch.sources.mlsource` | `official-source-release` |
 | `nsfw_ml_extensions` | NSFW sources | `official.mangalaunch.nsfw.sources` | `official.mangalaunch.nsfw.sources.mlsource` | `official-nsfw-source-release` |
-
-The display name of these packages is **Unofficial Extensions**. Existing technical IDs and archive names are retained for updates. For a new independent package, choose your own unique `extensionId`, publisher key and source IDs; do not use someone else's namespace. Publish NSFW sources in the separate appropriate package and mark them `isNsfw: true`.
-
-Source, manga and chapter IDs must remain stable: the library, history and progress depend on them. A domain change is not an ID change. Do not move an already published sourceId to another package or publisher: uninstalling a package does not release its registered ownership.
 
 ## 2. Manifest for a separate package
 
@@ -767,7 +764,6 @@ interface MangaDto {
   status: string | null; type: string | null; ageRating: string | null;
   rating: number | null; releaseYear: string | null;
   pageCount: number | null; languageFlagUrl: string | null; tags: string[];
-  languageFlagData?: string | null;
 }
 interface ChapterAccessDto {
   type: 'available' | 'temporarilyUnavailable' | 'paid';
@@ -788,7 +784,6 @@ interface RecommendationPageDto {
 | MangaDto.id, ChapterDto.id | Nonempty stable strings. They need not be numbers or URLs; composite IDs are allowed. Preserve the format across domain changes. |
 | title | Nonempty plain display text; do not replace a missing manga with a fictional title. |
 | coverUrl, languageFlagUrl | Absolute HTTPS URL or null, with an allowed image origin. Do not use data:/blob: or relative paths. |
-| languageFlagData | Optional static PNG data URI (`data:image/png;base64,...`) for a small embedded flag: at most 4096 decoded bytes, dimensions from 1×1 to 256×128. Not valid for covers or reader pages. Updated hosts render it from memory without HTTP; older hosts ignore this additive field. |
 | description | String or null, up to 256 Ki characters; do not return the entire website document. |
 | secondaryTitle, author, artist, status, type, ageRating, releaseYear | Strings or null. There are no universal status/type/ageRating enums. releaseYear is a string, not a number. |
 | rating | Finite number or null; the wire contract specifies no universal scale and does not normalize ratings automatically. |
