@@ -36,6 +36,8 @@ test('Akuma is one multilingual adult source with source-owned branding, browser
   assert.deepEqual(source.auth.rules,{cookieAny:['remember_web_*']});
   assert.equal(source.network.allowSubdomains,true);assert.ok(source.network.imageOrigins.includes(base));
   assert.equal(source.network.transportProfile,'host.platform.v1');assert.equal(source.network.userAgentProfile,'browser');
+  assert.ok(source.network.origins.includes('https://check.ddos-guard.net'));
+  assert.equal(source.network.authOrigins.includes('https://check.ddos-guard.net'),false);
   assert.deepEqual(source.network.authOrigins,[base,'https://s1.akuma.moe','https://s2.akuma.moe']);
   assert.deepEqual(source.filterBindings,{tags:'tags',artist:'artists',author:'groups'});
 });
@@ -150,6 +152,130 @@ test('Akuma browser challenges stay typed even when served with HTTP 200',async(
   await assert.rejects(source.getPopular(),{code:'challenge_required'});
 });
 
+test('Akuma renews an expired guard cookie and retries the same thumbnail page',async()=>{
+  for(const status of [200,403]) {
+    let guarded=false,renewed=false;
+    const guardBody='<title>DDoS-Guard</title>';
+    const {source,calls}=fixture({request:async input=>{
+      if(input.url==='https://check.ddos-guard.net/check.js')return {body:"new Image().src='/.well-known/ddos-guard/check';"};
+      if(new URL(input.url).pathname==='/.well-known/ddos-guard/check'){renewed=true;return {status:204,body:''};}
+      if(input.method==='GET')return {body:'seed'};
+      if(new URL(input.url).searchParams.has('cursor')&&!renewed){
+        guarded=true;
+        if(status===403)throw Object.assign(Error('denied'),{httpStatus:403,body:guardBody});
+        return {status:200,body:guardBody};
+      }
+      const next=renewed?(new URL(input.url).searchParams.get('cursor')==='after-renewal'?null:'after-renewal'):'saved-boundary';
+      return {body:JSON.stringify(listing('',next))};
+    },extract:async body=>body==='seed'?{csrf:'seed-csrf'}:JSON.parse(body)});
+    await source.getPopular();
+    assert.equal((await source.getPopular({page:2})).length,1);
+    assert.equal(guarded,true);assert.equal(renewed,true);
+    const posts=calls.filter(call=>call.method==='POST');
+    assert.equal(posts.length,3);
+    assert.equal(posts[1].url,posts[2].url);assert.equal(posts[1].body,posts[2].body);
+    assert.equal(new URL(posts[2].url).searchParams.get('cursor'),'saved-boundary');
+    assert.equal(new URLSearchParams(posts[2].body).get('view'),'3');
+    await source.getPopular({page:3});
+    assert.equal(new URL(calls.at(-1).url).searchParams.get('cursor'),'after-renewal');
+  }
+});
+
+test('Akuma concurrent guard failures share one renewal and preserve both searches',async()=>{
+  let renewed=false;
+  const {source,calls}=fixture({request:async input=>{
+    if(input.url==='https://check.ddos-guard.net/check.js')return {body:"new Image().src='/.well-known/ddos-guard/check';"};
+    if(new URL(input.url).pathname==='/.well-known/ddos-guard/check'){renewed=true;return {status:204,body:''};}
+    if(input.method==='GET')return {body:'seed'};
+    if(!renewed)throw Object.assign(Error('guard'),{httpStatus:403,body:'<title>DDoS-Guard</title>'});
+    return {body:'catalog'};
+  },extract:async body=>body==='seed'?{csrf:'seed-csrf'}:listing()});
+  const results=await Promise.all([source.getPopular(),source.search({selectedFilters:{language:['russian']}})]);
+  assert.ok(results.every(items=>items.length===1));
+  assert.equal(calls.filter(call=>call.url==='https://check.ddos-guard.net/check.js').length,1);
+  assert.equal(calls.filter(call=>new URL(call.url).pathname==='/.well-known/ddos-guard/check').length,1);
+  assert.ok(calls.every(call=>!Object.keys(call.headers).some(key=>key.toLowerCase()==='cookie')));
+});
+
+test('Akuma renews CSRF after guard recovery without losing the filtered page cursor',async()=>{
+  let renewed=false;
+  const q='language:russian$';
+  const {source,calls}=fixture({request:async input=>{
+    if(input.url==='https://check.ddos-guard.net/check.js')return {body:"new Image().src='/.well-known/ddos-guard/check';"};
+    if(new URL(input.url).pathname==='/.well-known/ddos-guard/check'){renewed=true;return {body:''};}
+    if(input.method==='GET')return {body:renewed?'new-seed':'old-seed'};
+    if(new URL(input.url).searchParams.has('cursor')){
+      if(!renewed)throw Object.assign(Error('guard'),{httpStatus:403,body:'<title>DDoS-Guard</title>'});
+      if(new URLSearchParams(input.body).get('_token')!=='new-seed')throw Object.assign(Error('CSRF'),{httpStatus:419});
+    }
+    return {body:JSON.stringify({...listing(q,new URL(input.url).searchParams.has('cursor')?null:'saved-boundary'),csrf:renewed?'new-seed':'old-seed'})};
+  },extract:async body=>body.endsWith('-seed')?{csrf:body}:JSON.parse(body)});
+  const selectedFilters={language:['russian']};
+  await source.search({selectedFilters});
+  assert.equal((await source.search({selectedFilters,page:2})).length,1);
+  const posts=calls.filter(call=>call.method==='POST');
+  assert.equal(posts.length,4);
+  assert.ok(posts.slice(1).every(call=>new URL(call.url).searchParams.get('q')===q&&new URL(call.url).searchParams.get('cursor')==='saved-boundary'));
+  assert.equal(new URLSearchParams(posts.at(-1).body).get('_token'),'new-seed');
+});
+
+test('Akuma a late guard response reuses the cookie already renewed by another request',async()=>{
+  let renewed=false,rejectTitle,startedTitle;
+  const titleStarted=new Promise(resolve=>{startedTitle=resolve;});
+  const guardError=()=>Object.assign(Error('guard'),{httpStatus:403,body:'<title>DDoS-Guard</title>'});
+  const {source,calls}=fixture({request:async input=>{
+    if(input.url==='https://check.ddos-guard.net/check.js')return {body:"new Image().src='/.well-known/ddos-guard/check';"};
+    if(new URL(input.url).pathname==='/.well-known/ddos-guard/check'){renewed=true;return {body:''};}
+    if(new URL(input.url).pathname.startsWith('/g/')){
+      if(renewed)return {body:'title'};
+      return new Promise((resolve,reject)=>{rejectTitle=reject;startedTitle();});
+    }
+    if(input.method==='GET')return {body:'bootstrap'};
+    if(!renewed)throw guardError();
+    return {body:'catalog'};
+  }});
+  const title=source.getDetails({mangaId:id});
+  await titleStarted;
+  await source.getPopular();
+  rejectTitle(guardError());
+  assert.equal((await title).id,id);
+  assert.equal(calls.filter(call=>call.url==='https://check.ddos-guard.net/check.js').length,1);
+});
+
+test('Akuma bounds guard recovery and never executes or follows arbitrary script URLs',async()=>{
+  for(const body of ["location.href='https://untrusted.example/x';", "new Image().src='/.well-known/ddos-guard/../../../login';",'<title>DDoS-Guard</title>']) {
+    const {source,calls}=fixture({request:async input=>{
+      if(input.url==='https://check.ddos-guard.net/check.js')return {body};
+      throw Object.assign(Error('guard'),{httpStatus:403,body:'<title>DDoS-Guard</title>'});
+    }});
+    await assert.rejects(source.getPopular(),{code:'challenge_required'});
+    assert.equal(calls.length,2);
+  }
+  const {source,calls}=fixture({request:async input=>{
+    if(input.url==='https://check.ddos-guard.net/check.js')return {body:"new Image().src='/.well-known/ddos-guard/check';"};
+    if(new URL(input.url).pathname==='/.well-known/ddos-guard/check')return {body:''};
+    throw Object.assign(Error('guard'),{httpStatus:403,body:'<title>DDoS-Guard</title>'});
+  }});
+  await assert.rejects(source.getPopular(),{code:'challenge_required'});
+  assert.equal(calls.length,4);
+});
+
+test('Akuma a failed guard renewal does not poison the next attempt',async()=>{
+  let fail=true,renewed=false;
+  const {source,calls}=fixture({request:async input=>{
+    if(input.url==='https://check.ddos-guard.net/check.js'){
+      if(fail)throw Object.assign(Error('network'),{code:'network'});
+      return {body:"new Image().src='/.well-known/ddos-guard/check';"};
+    }
+    if(new URL(input.url).pathname==='/.well-known/ddos-guard/check'){renewed=true;return {body:''};}
+    if(!renewed)throw Object.assign(Error('guard'),{httpStatus:403,body:'<title>DDoS-Guard</title>'});
+    return {body:input.method==='GET'?'seed':'catalog'};
+  },extract:async body=>body==='seed'?{csrf:'seed-csrf'}:listing()});
+  await assert.rejects(source.getPopular(),{code:'network'});fail=false;
+  assert.equal((await source.getPopular()).length,1);
+  assert.equal(calls.filter(call=>call.url==='https://check.ddos-guard.net/check.js').length,2);
+});
+
 test('Akuma cursor pages are isolated by the full query and a later page reuses its known cursor',async()=>{
   const requests=[],{source}=fixture({request:async input=>{
     if(input.method==='GET')return {url:input.url,body:'seed'};
@@ -184,6 +310,22 @@ test('Akuma retains the original pagination boundary while reading a chapter for
   Date.now=()=>clock()+30*60*1000;
   try {await source.getPopular({page:2});} finally {Date.now=clock;}
   assert.deepEqual(requests,[null,'original-boundary']);
+});
+
+test('Akuma refreshing another feed never discards an existing catalog cursor',async()=>{
+  const posts=[];
+  const {source}=fixture({request:async input=>{
+    if(input.method==='GET')return {body:'seed'};
+    const cursor=new URL(input.url).searchParams.get('cursor');
+    posts.push(cursor);
+    return {body:JSON.stringify(listing('',cursor?`${cursor}-next`:`boundary-${posts.length}`))};
+  },extract:async body=>body==='seed'?{csrf:'seed-csrf'}:JSON.parse(body)});
+  await source.getPopular();
+  await source.getPopular({page:2});
+  await source.getLatest();
+  await source.search();
+  await source.getPopular({page:3});
+  assert.deepEqual(posts,[null,'boundary-1',null,null,'boundary-1-next']);
 });
 
 test('Akuma settings/session instances never share CSRF or image caches and honor the chosen base URL',async()=>{

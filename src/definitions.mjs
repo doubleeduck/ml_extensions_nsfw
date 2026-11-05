@@ -93,7 +93,7 @@ const senkuro = () => {
 export const registrations = [
   source('all.nsfw.akuma','Akuma','akuma.moe','sources/akuma.mjs',{nsfw:true,custom:true,template:'/g/{id}',
     auth:{...cookieAuth('akuma.moe','/login'),rules:{cookieAny:['remember_web_*']},sessionExport:{headers:['Cookie'],values:[]}},
-    images:['https://akuma.moe'],bindings:{tags:'tags',artist:'artists',author:'groups'},network:{transportProfile:'host.platform.v1',userAgentProfile:'browser',maxConcurrentRequests:2,
+    origins:['https://check.ddos-guard.net'],images:['https://akuma.moe'],bindings:{tags:'tags',artist:'artists',author:'groups'},network:{transportProfile:'host.platform.v1',userAgentProfile:'browser',maxConcurrentRequests:2,
       // The two image hosts need the source's parent-domain DDoS-Guard cookie.
       authOrigins:['https://akuma.moe','https://s1.akuma.moe','https://s2.akuma.moe']}}),
   source('all.nsfw.threehentai','3Hentai','3hentai.net','sources/threehentai.mjs',{nsfw:true,custom:true,recommendations:true,template:'/d/{id}',

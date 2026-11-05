@@ -13,6 +13,9 @@ const categories=[['doujinshi','Додзинси'],['manga','Манга'],['imag
 const fields=[['groups','group','Группы'],['artists','artist','Художники'],['parodies','parody','Пародии'],['characters','character','Персонажи']];
 const marks={female:'♀',male:'♂',other:'◊'};
 const text=selector=>({selector,text:true});
+const guardScript='https://check.ddos-guard.net/check.js';
+const guardPage=body=>typeof body==='string'&&/<title[^>]*>\s*DDoS-Guard\s*<\/title>/iu.test(body);
+const guardRequired=()=>Object.assign(Error('Akuma browser verification is required.'),{code:'challenge_required',phase:'http'});
 export function buildFilters() {
   return [filter('singleSelect','language','Язык',languages),filter('triStateMultiSelect','categories','Категории',categories),
     {...filter('text','tags','Теги'),caption:'Через запятую; «-» исключает. Поддерживаются female:, male:, other: и метки ♀, ♂, ◊ из карточки.'},
@@ -121,17 +124,42 @@ export function parsePages(input,title) {
 }
 export default function createAkuma(ctx) {
   const base=new URL(ctx.baseUrl).origin,contexts=new Map(),inflight=new Map();
-  let csrf=null,csrfPending=null;
-  async function request(url,body) {
-    try {
-      const response=await ctx.http.request({method:body==null?'GET':'POST',url,responseType:'text',userAgentProfile:'browser',
-        headers:{Accept:'text/html,application/json',Referer:`${base}/`,...(body==null?{}:{Origin:base,'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'})},body});
-      requireHtmlBody(response,'Akuma');
-      if(/<title[^>]*>\s*DDoS-Guard\s*<\/title>/iu.test(response.body))throw Object.assign(Error('Akuma browser verification is required.'),{code:'challenge_required',phase:'http'});
-      return response;
-    } catch(error) {
-      if(error.httpStatus===403&&typeof error.body==='string'&&/<title[^>]*>\s*DDoS-Guard\s*<\/title>/iu.test(error.body))throw Object.assign(Error('Akuma browser verification is required.'),{code:'challenge_required',phase:'http'});
+  let csrf=null,csrfPending=null,guardPending=null,guardRevision=0;
+  function send(url,body) {
+    return ctx.http.request({method:body==null?'GET':'POST',url,responseType:'text',userAgentProfile:'browser',
+      headers:{Accept:'text/html,application/json',Referer:`${base}/`,...(body==null?{}:{Origin:base,'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'})},body});
+  }
+  function renewGuard() {
+    if(!guardPending)guardPending=(async()=>{
+      // Read the provider's cookie endpoint as data. Never execute its script
+      // or send the site's session to the provider's separate origin.
+      const response=await send(guardScript);
+      const path=typeof response.body==='string'?/['"](\/\.well-known\/ddos-guard\/[^'"\s<>\\]*)['"]/u.exec(response.body)?.[1]:null;
+      if(!path||path.length>2048)throw guardRequired();
+      const url=new URL(path,base);
+      if(url.origin!==base||!url.pathname.startsWith('/.well-known/ddos-guard/')||url.hash)throw guardRequired();
+      // The host imports Set-Cookie before returning, including for HTTP 204.
+      await send(url.href);
+      guardRevision++;
+    })().catch(error=>{
+      if(error.httpStatus===403&&guardPage(error.body))throw guardRequired();
       throw error;
+    }).finally(()=>{guardPending=null;});
+    return guardPending;
+  }
+  async function request(url,body) {
+    for(let attempt=0;attempt<2;attempt++) {
+      const revision=guardRevision;
+      try {
+        const response=await send(url,body);
+        if(guardPage(response.body))throw Object.assign(guardRequired(),{httpStatus:response.status??200,body:response.body});
+        requireHtmlBody(response,'Akuma');
+        return response;
+      } catch(error) {
+        if(![200,403].includes(error.httpStatus)||!guardPage(error.body))throw error;
+        if(attempt)throw guardRequired();
+        if(revision===guardRevision)await renewGuard();
+      }
     }
   }
   async function html(url,projection) {
@@ -166,18 +194,18 @@ export default function createAkuma(ctx) {
       return parseCatalog(data,base,query,cursor);
     });
   }
-  function context(query,refresh) {
-    let value=contexts.get(query);
+  function context(key,refresh) {
+    let value=contexts.get(key);
     if(refresh||!value)value={cursors:new Map([[1,null]])};
-    contexts.delete(query);contexts.set(query,value);
+    contexts.delete(key);contexts.set(key,value);
     while(contexts.size>8)contexts.delete(contexts.keys().next().value);
     return value;
   }
-  async function catalog(query={}) {
+  async function catalog(feed,query={}) {
     const q=searchQuery(query),page=Math.max(1,Math.trunc(query.page??1));
     if(!Number.isSafeInteger(page))throw parseError('Invalid Akuma page.');
-    return coalesce(JSON.stringify([q,page]),async()=>{
-      const state=context(q,page===1);
+    return coalesce(JSON.stringify([feed,q,page]),async()=>{
+      const state=context(JSON.stringify([feed,q]),page===1);
       let current=Math.max(...[...state.cursors.keys()].filter(value=>value<=page));
       if(page-current>200)throw Object.assign(Error('Akuma pagination work limit exceeded.'),{code:'resource_limit',phase:'pagination'});
       while(current<=page) {
@@ -201,7 +229,7 @@ export default function createAkuma(ctx) {
   },{ttlMs:60000});
   return {
     async getFilters(){return buildFilters();},
-    getPopular:catalog,getLatest:catalog,search:catalog,
+    getPopular:query=>catalog('popular',query),getLatest:query=>catalog('latest',query),search:query=>catalog('search',query),
     async getDetails({mangaId}){return (await title(normalizeId(mangaId))).info;},
     async getChapters({mangaId}){const data=await title(normalizeId(mangaId));return [chapter({id:data.info.id,title:'Галерея',number:1,uploadedAt:data.uploadedAt})];},
     async getPages({mangaId,chapterId}){const id=normalizeId(chapterId);if(mangaId!=null&&normalizeId(mangaId)!==id)throw parseError('Akuma chapter belongs to another gallery.');return pages(id);},
