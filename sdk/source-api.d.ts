@@ -21,6 +21,8 @@ export interface MangaDto {
   /** Optional static PNG data URI, <=4 KiB decoded and <=256x128; no HTTP request.
    * Older hosts ignore this additive field. languageFlagUrl remains HTTPS-only. */
   languageFlagData?:string|null;
+  /** Language of available pages, normalized BCP 47, null when unknown. */
+  languageCode?:string|null;
 }
 export interface ChapterAccessDto {
   type:'available'|'temporarilyUnavailable'|'paid'; availableAt:string|null;

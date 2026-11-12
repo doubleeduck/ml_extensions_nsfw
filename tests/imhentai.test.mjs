@@ -29,7 +29,7 @@ test('IMHentai simple search delimiters, speechless/random and edition listings'
 });
 test('IMHentai metadata, language flags and signed reader page-map reconstruction', () => {
   const listing = parseListing([{link:{href:'/gallery/123/',title:'A\n B'},cover:{lazy:'/a.jpg',src:'data:image/png;base64,xx'},flag:{src:'/ru.png'},type:'Manga'},{link:null}],base);
-  assert.equal(listing[0].id,'123'); assert.equal(listing[0].title,'A\n B'); assert.equal(listing[0].languageFlagUrl,`${base}/ru.png`);
+  assert.equal(listing[0].id,'123'); assert.equal(listing[0].title,'A\n B'); assert.equal(listing[0].languageFlagUrl,`${base}/ru.png`); assert.equal(listing[0].languageCode,'ru');
   const details = parseDetails({root:{title:'Title',subtitle:'Other',cover:null,rows:[{label:'Artists:',values:['jairou | xil']},{label:'Category:',values:['Manga']},{label:'Tags:',values:['tag']}]},pageCount:'3'},'123',base);
   assert.equal(details.artist,'jairou | xil'); assert.equal(details.author,'jairou | xil'); assert.equal(details.description,'Other\n\nPages: 3\n\nCategory: Manga');
   assert.deepEqual(parsePages({image:'//cdn.imhentai.xxx/a/1.jpg',dir:'dir',token:'token',scripts:[`var g_th = $.parseJSON('{"3":"w,0","1":"j,0","2":"p,0"}');`]},base),[

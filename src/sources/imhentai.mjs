@@ -1,5 +1,5 @@
 import {recent} from '../core/recent.mjs';
-import {chapter,filter,manga,normalizeText,parseError,record,string} from '../core/data.mjs';
+import {chapter,filter,manga,normalizeText,parseError,record,string,titleLanguageCode} from '../core/data.mjs';
 import {requireArray,requireRecord} from '../core/http.mjs';
 
 const categories = [['m','Manga'],['d','Doujinshi'],['w','Western'],['i','Image Set'],['a','Artist CG'],['g','Game CG']];
@@ -90,7 +90,9 @@ export function parseListing(input,base) {
   for (const value of requireArray(input,'IMHentai listing')) {
     const row = requireRecord(value,'IMHentai card'), link = record(row.link), id = galleryId(link.href), title = string(link.title);
     if (!id || !title) continue; // Ad/empty tiles are not galleries.
-    items.push(manga({id,title,coverUrl:imageUrl(row.cover,base),languageFlagUrl:imageUrl(row.flag,base),type:row.type ?? null}));
+    const flag = imageUrl(row.flag,base);
+    const language = flag?.split('/').at(-1)?.split('.')[0] ?? '';
+    items.push(manga({id,title,coverUrl:imageUrl(row.cover,base),languageFlagUrl:flag,languageCode:titleLanguageCode([language]),type:row.type ?? null}));
   }
   return items;
 }
@@ -113,7 +115,7 @@ export function parseDetails(input,id,base,{random = false} = {}) {
   const sections = [root.subtitle || null,count == null ? null : `Pages: ${count}`,
     ...['Parodies','Characters','Languages','Category'].map(key => details[key]?.length ? `${key}: ${details[key].join(', ')}` : null)].filter(Boolean);
   return manga({...common,description:sections.join('\n\n') || null,pageCount:count,author:(details.Groups ?? details.Artists)?.join(', ') ?? null,
-    artist:details.Artists?.join(', ') ?? null,type:details.Category?.[0] ?? null,tags:details.Tags ?? []});
+    languageCode:titleLanguageCode(details.Languages??[]),artist:details.Artists?.join(', ') ?? null,type:details.Category?.[0] ?? null,tags:details.Tags ?? []});
 }
 export const pagesProjection = {fields:{image:{selector:'#gimg',attr:'src'},dir:{selector:'#image_dir',attr:'value'},
   token:{selector:'#gallery_id',attr:'value'},scripts:{selector:'script',all:true,...rawText}}};

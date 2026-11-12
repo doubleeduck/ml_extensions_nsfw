@@ -1,4 +1,4 @@
-import {chapter,filter,isoDate,manga,normalizeText,parseError,record,string} from '../core/data.mjs';
+import {chapter,filter,isoDate,manga,normalizeText,parseError,record,string,titleLanguageCode} from '../core/data.mjs';
 import {requireArray,requireHtmlBody,requireRecord,urlWithQuery} from '../core/http.mjs';
 import {classFlagData,languageFlagData} from '../core/gallery_flags.mjs';
 import {recent} from '../core/recent.mjs';
@@ -107,7 +107,7 @@ export function parseTitle(input,id,base) {
   const date=values('date')[0]?.match(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?::\d{2})?/u)?.[0];
   return {csrf:string(data.csrf),preview:mediaUrl(data.preview,base),uploadedAt:date?isoDate(date.replace(' ','T')+'Z'):null,
     info:manga({id:normalizeId(id),title,coverUrl,secondaryTitle:string(data.secondary),author:values('group').join(', ')||null,artist:values('artist').join(', ')||null,
-      type:values('category')[0]??null,status:'completed',ageRating:'18+',pageCount:count,languageFlagData:values('language').map(value=>languageFlagData(value.toLowerCase())).find(Boolean)??null,
+      languageCode:titleLanguageCode(values('language')),type:values('category')[0]??null,status:'completed',ageRating:'18+',pageCount:count,languageFlagData:values('language').map(value=>languageFlagData(value.toLowerCase())).find(Boolean)??null,
       tags:[...new Set(Object.entries(marks).flatMap(([field,mark])=>values(field).map(value=>`${value} ${mark}`)))],
       description:[['Язык',values('language')],['Пародии',values('parody')],['Персонажи',values('character')]].filter(([,values])=>values.length).map(([label,values])=>`${label}: ${values.join(', ')}`).join('\n')||null})};
 }

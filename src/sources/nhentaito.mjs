@@ -1,5 +1,5 @@
 import createGallery,{fields,galleryFilters,imageUrl,languages,listing,numericId,picture,scripts} from '../core/gallery.mjs';
-import {filter,manga,normalizeText,parseError,record,string} from '../core/data.mjs';
+import {filter,manga,normalizeText,parseError,record,string,titleLanguageCode} from '../core/data.mjs';
 import {requireArray,requireRecord,urlWithQuery} from '../core/http.mjs';
 import {classFlagData,tagFlagData,languageFlagData} from '../core/gallery_flags.mjs';
 import {recent} from '../core/recent.mjs';
@@ -125,7 +125,7 @@ export function details(input,id,base) {
   const tags=requireArray(gallery.tags,'nhentai.to tags'),values=type=>tags.filter(tag=>tag.type===type).map(tag=>normalizeText(tag.name)).filter(Boolean),count=Number(gallery.num_pages);
   if(!Number.isInteger(count)||count<1)throw parseError('Invalid nhentai.to page count.');
   const coverUrl=mediaUrl(data.cover,base);if(!coverUrl)throw parseError('nhentai.to cover is missing.');
-  return {gallery,info:manga({id,title,secondaryTitle:string(names.japanese),coverUrl,languageFlagData:values('language').map(languageFlagData).find(Boolean)??null,pageCount:count,artist:values('artist').join(', ')||null,author:values('group').join(', ')||null,
+  return {gallery,info:manga({id,title,secondaryTitle:string(names.japanese),coverUrl,languageCode:titleLanguageCode(values('language')),languageFlagData:values('language').map(languageFlagData).find(Boolean)??null,pageCount:count,artist:values('artist').join(', ')||null,author:values('group').join(', ')||null,
     type:values('category')[0]??null,tags:values('tag'),ageRating:'18+',status:'completed',description:[values('language').join(', '),`Страниц: ${count}`].filter(Boolean).join('\n')}),related:listing(withFlags(data.related,base),base,'g').filter(row=>row.id!==id)};
 }
 export function pages(data) {

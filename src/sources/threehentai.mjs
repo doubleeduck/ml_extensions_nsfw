@@ -1,5 +1,5 @@
 import createGallery,{fields,galleryFilters,imageUrl,languages,listing,picture,scripts} from '../core/gallery.mjs';
-import {manga,normalizeText,parseError} from '../core/data.mjs';
+import {manga,normalizeText,parseError,titleLanguageCode} from '../core/data.mjs';
 import {requireArray,requireRecord,urlWithQuery} from '../core/http.mjs';
 import {classFlagData,languageFlagData} from '../core/gallery_flags.mjs';
 
@@ -31,7 +31,7 @@ export function details(input,id,base) {
   const count=requireArray(data.count,'3Hentai page thumbnails').length;if(!count)throw parseError('3Hentai page count is missing.');
   const tags=values('tags'),type=values('category')[0]??null,language=values('language');
   const flag=requireArray(data.links,'3Hentai metadata').filter(row=>new URL(row.href,base).pathname.startsWith('/language/')).map(row=>languageFlagData(new URL(row.href,base).pathname.split('/')[2])).find(Boolean)??null;
-  return {info:manga({id,title,coverUrl:imageUrl(data.cover,base),languageFlagData:flag,tags,type,pageCount:count,status:'completed',ageRating:'18+',
+  return {info:manga({id,title,coverUrl:imageUrl(data.cover,base),languageFlagData:flag,languageCode:titleLanguageCode(language),tags,type,pageCount:count,status:'completed',ageRating:'18+',
     author:values('groups').join(', ')||null,artist:values('artists').join(', ')||null,description:[type,language.join(', '),`Страниц: ${count}`].filter(Boolean).join('\n')}),related:listing(withFlags(data.related),base,'d').filter(row=>row.id!==id)};
 }
 function decodeBase64(value) {

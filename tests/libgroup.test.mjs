@@ -2,9 +2,17 @@ import {readFile} from 'node:fs/promises';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import createLibGroup from '../src/engines/libgroup.mjs';
+import {sourceDefinitions} from '../src/definitions.mjs';
 import {decodeChapterId, parseAccess, parseCatalogManga, parseChapterEntries, parseDetails, parseFilters, searchParameters, summary} from '../src/engines/libgroup_parser.mjs';
 
 const config = {titleLanguage:'eng',chapterMode:'ms_mixing'};
+test('LibGroup sources allow the current LibSocial cover host', () => {
+  for (const id of ['ru.nsfw.hentailib','ru.nsfw.yaoilib']) {
+    const source = sourceDefinitions().find(value => value.id === id);
+    assert.ok(source.network.imageOrigins.includes('https://lib.social'));
+    assert.equal(source.network.allowSubdomains,true);
+  }
+});
 const item = {id:7965,slug:'chainsaw-man',slug_url:'7965--chainsaw-man',eng_name:'Chainsaw Man',rus_name:'Человек-бензопила',name:'Name',
   cover:{md:'https://cover.example/image.jpg'},status:{label:'Ongoing'},type:{label:'Manga'},caution:{label:'16+'},
   rating:{average:'9.2'},releaseDateString:'December 2018',genres:[{name:'Drama'},{name:'drama'}]};
