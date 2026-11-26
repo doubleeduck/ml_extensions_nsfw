@@ -2,7 +2,7 @@ import {recent} from '../core/recent.mjs';
 import {parseError, record, string} from '../core/data.mjs';
 import {finiteNumber, requireArray, requireRecord, requireText, urlWithQuery} from '../core/http.mjs';
 import {decodeChapterId, needsTitlePreview, parseAccess, parseCatalogManga, parseChapterEntries, parseDetails,
-  parseFilters, searchParameters, unavailable} from './libgroup_parser.mjs';
+  parseFilters, searchParameters, supportsSite, unavailable} from './libgroup_parser.mjs';
 
 const fallbackDomains = ['https://api.cdnlibs.org','https://api2.mangalib.me','https://hapi.hentaicdn.org','https://api.imglib.info'];
 const constantFields = ['genres','tags','types','scanlateStatus','status','format','ageRestriction','imageServers'];
@@ -74,7 +74,7 @@ export default function createLibGroup(ctx) {
     const map = new Map();
     for (const server of dataList({data:(await constants(config)).imageServers})) {
       const item = requireRecord(server,'image server');
-      if (requireArray(item.site_ids,'image server sites').some(value => Number(value) === siteId)) {
+      if (supportsSite(item,siteId)) {
         map.set(item.id == null ? '' : String(item.id),requireText(item.url,'image server url'));
       }
     }
